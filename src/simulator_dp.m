@@ -42,9 +42,9 @@ count_right = zeros(size(d));
 
 k_size = floor( (1-(F./d) ) * aperture_size );
 
+tic;
 for i = 1:h % x
     for j = 1 :w %y
-        
         ksizetb = k_size(i,j);
 
         y1 = i - floor(ksizetb/2);
@@ -100,6 +100,28 @@ for i = 1:h % x
         
     end
 end
+toc
+
+if false  % Zhiwei dump input and output data for CUDA test
+    count_left_nonzero = single(count_left);
+    count_left_nonzero(count_left == 0) = 1;
+    img_left_avg = single(img_left ./ count_left_nonzero);
+
+    count_right_nonzero = single(count_right);
+    count_right_nonzero(count_right == 0) = 1;
+    img_right_avg = single(img_right ./ count_right_nonzero);
+
+    RGB_img_s = single(RGB_img);
+    img_left_s = single(img_left);
+    img_right_s = single(img_right);
+    count_left_s = single(count_left);
+    count_right_s = single(count_right);
+
+    save('../data/matlab_dump.mat', 'RGB_img_s', 'img_left_s', ...
+      'img_right_s', 'k_size', 'img_left_s', 'img_right_s', ...
+      'count_left_s', 'count_right_s');
+end
+
 %%
 % Intigral image - left
 integral_image=(integralImage(img_left));
