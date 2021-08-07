@@ -1,77 +1,124 @@
-import torch, time
-from CUDA.lib_dualpixel import DualPixel
-from scipy import io as scio
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import numpy as np
+import h5py
+import matplotlib.pyplot as plt
+import sys
+sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages') # in order to import cv2 under python3
+import cv2
+sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages') # append back in order to import rospy
+from torch.autograd import Variable
+# from multiprocessing import Process, Manager
+import operator
+from torch.multiprocessing import Pool, Process, set_start_method
+try:
+    set_start_method('spawn')
+except RuntimeError:
+    pass
+import skimage.transform 
+
+def simdp(RGB_img, depth, image_left, image_right):
+
+    cpsize = 5;
+
+    # # depth_scaled=depth*5.0/(depth.max())
+
+    ker_size=depth
+
+    S=np.shape(depth) #(8, 192, 192)
+    b = S[0]
+    h = S[1]
+    w = S[2]
+    # print('start')
+
+    img_left    = torch.zeros([b,3,h,w]).cuda()#np.zeros([b,3,h,w]) # , dtype=torch.long
+    # img_left = Variable(img_left).cuda()
+    count_left  = torch.zeros([b,1,h,w]).cuda()#np.zeros([b,1,h,w])
+    img_right   = torch.zeros([b,3,h,w]).cuda()#np.zeros([b,3,h,w])
+    count_right = torch.zeros([b,1,h,w]).cuda()#np.zeros([b,1,h,w])
+    # print(RGB_img.size(),img_left.size())
+    # ((8, 3, 192, 192), (8, 3, 192, 192))
+
+    #Determining the projected regions on the image plane for every pixel position of the input image/scene       
+    for i in range(h):
+        for j in range(w):
 
 
-torch.manual_seed(2021)
-torch.cuda.manual_seed_all(2021)
-torch.backends.cudnn.deterministic = True
-torch.backends.cudnn.benchmark = False
+            # if ker_size[:,i,j]<1:
+            #     continue
+
+            y1 = (i - ker_size[:,i,j]).round().int()
+            y2 = (i + ker_size[:,i,j]).round().int()
+            z1 = j
+            z2 = (j + ker_size[:,i,j]).round().int()
+            # print('1,',i,j,y1,y2,z1,z2)
+            # y1.unsqueeze(1)
+
+            if y1==y2: 
+                y2=y2+1
+
+            if z1==z2: 
+                z2=z2+1
+
+            y1 = y1.clamp(0, h-1).cpu().numpy()
+            y2 = y2.clamp(0, h-1).cpu().numpy()
+        
+            z2 = z2.clamp(0, w-1).cpu().numpy()
+            # print('2',i,j,y1,y2,z1,z2)
+
+            #Synthesizing Left Image    
+            img_left[:,:,y1,z1]=img_left[:,:,y1,z1]+RGB_img[:,:,i,j].unsqueeze(2)
+            img_left[:,:,y2,z1]=img_left[:,:,y2,z1]-RGB_img[:,:,i,j].unsqueeze(2)
+            img_left[:,:,y1,z2]=img_left[:,:,y1,z2]-RGB_img[:,:,i,j].unsqueeze(2)
+            img_left[:,:,y2,z2]=img_left[:,:,y2,z2]+RGB_img[:,:,i,j].unsqueeze(2)            
+
+            count_left[:,:,y1,z1]= count_left[:,:,y1,z1]+1
+            count_left[:,:,y2,z1]= count_left[:,:,y2,z1]-1
+            count_left[:,:,y1,z2]= count_left[:,:,y1,z2]-1
+            count_left[:,:,y2,z2]= count_left[:,:,y2,z2]+1
+
+            # z1 = j
+            z2 = (j - ker_size[:,i,j]).round().int()
+
+            if z1==z2: 
+                z2=z2-1
+
+            # z1 = z1.clamp(0, w-1).cpu().numpy()
+            z2 = z2.clamp(0, w-1).cpu().numpy()
+
+            #Synthesizing Right Image                
+
+            img_right[:,:,y1,z1]=img_right[:,:,y1,z1]+RGB_img[:,:,i,j].unsqueeze(2)
+            img_right[:,:,y2,z1]=img_right[:,:,y2,z1]-RGB_img[:,:,i,j].unsqueeze(2)
+            img_right[:,:,y1,z2]=img_right[:,:,y1,z2]-RGB_img[:,:,i,j].unsqueeze(2)
+            img_right[:,:,y2,z2]=img_right[:,:,y2,z2]+RGB_img[:,:,i,j].unsqueeze(2)
 
 
-if __name__ == '__main__':
-    device = 'cuda'
-    enable_dump_matlab = True
-    loops = 10001
+            count_right[:,:,y1,z1]= count_right[:,:,y1,z1]+1
+            count_right[:,:,y2,z1]= count_right[:,:,y2,z1]-1
+            count_right[:,:,y1,z2]= count_right[:,:,y1,z2]-1
+            count_right[:,:,y2,z2]= count_right[:,:,y2,z2]+1
 
-    # Data setup
-    if not enable_dump_matlab:
-        batch, channel, h, w = 1, 3, 1, 3
-        image = torch.tensor([[1, 4, 7, 2, 5, 8, 3, 6, 9]],
-                             dtype=torch.float32,
-                             device=device).view(batch, channel, h, w)
-        depth = torch.tensor([[2, 2, 2]], dtype=torch.float32, device=device).view(batch, h, w)
+    # print(img_left.size(),count_left.size()) #((1, 3, 192, 192), (1, 1, 192, 192))
+    integral_image=(cv2.integral(255*img_left.squeeze().cpu().detach().numpy().transpose(1, 2, 0)))
+    # print('integral_image', integral_image.shape)
+    integral_count=(cv2.integral(255*count_left.squeeze().cpu().detach().numpy()))
+    # print('integral_count', integral_count.shape)
+    integral_image = torch.from_numpy(integral_image).permute(2, 0, 1).float().unsqueeze(0) / 255
+    integral_count = torch.from_numpy(integral_count).unsqueeze(0).unsqueeze(1) / 255
+    # print(integral_image.shape,integral_count.shape)
+    integral_count = integral_count#.clamp(1e-4, 1)
+    # print(integral_count.min())
+    im_left = (integral_image/integral_count).clamp(-0.5, 0.5)
+ 
 
-        left_img_count = torch.zeros(batch, h, w, dtype=torch.int32, device=device)
-        right_img_count = torch.zeros(batch, h, w, dtype=torch.int32, device=device)
-        left_img_stack = image.new_zeros(size=(batch, channel, h, w))
-        right_img_stack = image.new_zeros(size=(batch, channel, h, w))
+    integral_image=(cv2.integral(255*img_right.squeeze().cpu().detach().numpy().transpose(1, 2, 0)))
+    integral_count=(cv2.integral(255*count_right.squeeze().cpu().detach().numpy()))
+    integral_image = torch.from_numpy(integral_image).permute(2, 0, 1).float().unsqueeze(0) / 255
+    integral_count = torch.from_numpy(integral_count).unsqueeze(0).unsqueeze(1) / 255
+    integral_count = integral_count#.clamp(1e-4, 1)
 
-        image = image.permute(0, 2, 3, 1)
-        left_img_stack = left_img_stack.permute(0, 2, 3, 1)
-        right_img_stack = right_img_stack.permute(0, 2, 3, 1)
+    im_right = (integral_image/integral_count).clamp(-0.5, 0.5)
 
-        DualPixel.DepthMerge(image, depth, left_img_count, right_img_count, left_img_stack, right_img_stack)
-    else:
-        # Load from MatLab dumped data, which was generated in "simulator_dp.m"
-        data = scio.loadmat('../data/matlab_dump.mat')
-        image = torch.from_numpy(data['RGB_img_s']).float().cuda() * 1
-        depth = torch.from_numpy(data['k_size']).float().cuda() * 1
-        left_img_count_gt = torch.from_numpy(data['count_left_s']).int().cuda() * 1
-        right_img_count_gt = torch.from_numpy(data['count_right_s']).int().cuda() * 1
-        left_img_gt = torch.from_numpy(data['img_left_s']).float().cuda() * 1
-        right_img_gt = torch.from_numpy(data['img_right_s']).float().cuda() * 1
-
-        batch = 1
-        h, w, channel = image.shape
-        image = image.view(batch, h, w, channel).contiguous()
-        depth = depth.view(batch, h, w).contiguous()
-        left_img_count_gt = left_img_count_gt.view(batch, h, w).contiguous()
-        right_img_count_gt = right_img_count_gt.view(batch, h, w).contiguous()
-        left_img_gt = left_img_gt.view(batch, h, w, channel).contiguous()
-        right_img_gt = right_img_gt.view(batch, h, w, channel).contiguous()
-
-        time_sum = 0
-        for loop_idx in range(loops):
-            left_img_count = torch.zeros(batch, h, w, dtype=torch.int32, device=device)
-            right_img_count = torch.zeros(batch, h, w, dtype=torch.int32, device=device)
-            left_img_stack = image.new_zeros(size=(batch, h, w, channel))
-            right_img_stack = image.new_zeros(size=(batch, h, w, channel))
-
-            # Call CUDA function
-            torch.cuda.synchronize()
-            time_start = time.time()
-            DualPixel.DepthMerge(image, depth, left_img_count, right_img_count, left_img_stack, right_img_stack)
-            torch.cuda.synchronize()
-
-            duration = time.time() - time_start
-            time_sum = time_sum + duration if (loop_idx > 0) else time_sum
-
-        print('Average CUDA time: {:.4f}ms.'.format(time_sum * 1.0e3 / (loops - 1)))
-
-        # Check correctness
-        print('Error, left count: {:d}, right count: {:d}; left img: {:.4f}, right img: {:.4f}.' \
-              .format((left_img_count - left_img_count_gt).abs().max().cpu().numpy(),
-                      (right_img_count - right_img_count_gt).abs().max().cpu().numpy(),
-                      (left_img_stack - left_img_gt).abs().max().cpu().numpy(),
-                      (left_img_stack - left_img_gt).abs().max().cpu().numpy()))
+    return im_left[:,:,:-1,:-1].cuda(),im_right[:,:,:-1,:-1].cuda()
