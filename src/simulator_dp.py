@@ -4,10 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
-import sys
-sys.path.remove('/opt/ros/kinetic/lib/python2.7/dist-packages') # in order to import cv2 under python3
 import cv2
-sys.path.append('/opt/ros/kinetic/lib/python2.7/dist-packages') # append back in order to import rospy
 from torch.autograd import Variable
 # from multiprocessing import Process, Manager
 import operator
@@ -18,107 +15,121 @@ except RuntimeError:
     pass
 import skimage.transform 
 
-def simdp(RGB_img, depth, image_left, image_right):
+def simdp(RGB_img, depth, image_left=None, image_right=None):
+    cpsize = 5
+    # depth_scaled = depth*5.0/(depth.max())
+    ker_size = depth
 
-    cpsize = 5;
-
-    # # depth_scaled=depth*5.0/(depth.max())
-
-    ker_size=depth
-
-    S=np.shape(depth) #(8, 192, 192)
+    S = np.shape(depth) # (8, 192, 192)
     b = S[0]
     h = S[1]
     w = S[2]
-    # print('start')
+    device = RGB_img.device
 
-    img_left    = torch.zeros([b,3,h,w]).cuda()#np.zeros([b,3,h,w]) # , dtype=torch.long
-    # img_left = Variable(img_left).cuda()
-    count_left  = torch.zeros([b,1,h,w]).cuda()#np.zeros([b,1,h,w])
-    img_right   = torch.zeros([b,3,h,w]).cuda()#np.zeros([b,3,h,w])
-    count_right = torch.zeros([b,1,h,w]).cuda()#np.zeros([b,1,h,w])
-    # print(RGB_img.size(),img_left.size())
-    # ((8, 3, 192, 192), (8, 3, 192, 192))
+    img_left = torch.zeros([b,3,h,w]).to(device)  # np.zeros([b,3,h,w]), dtype=torch.long
+    count_left = torch.zeros([b,1,h,w]).to(device)  # np.zeros([b,1,h,w])
+    img_right = torch.zeros([b,3,h,w]).to(device)  # np.zeros([b,3,h,w])
+    count_right = torch.zeros([b,1,h,w]).to(device)  # np.zeros([b,1,h,w])
 
-    #Determining the projected regions on the image plane for every pixel position of the input image/scene       
+    # Determining the projected regions on the image plane for every pixel position of the input image/scene
     for i in range(h):
         for j in range(w):
-
-
             # if ker_size[:,i,j]<1:
             #     continue
 
-            y1 = (i - ker_size[:,i,j]).round().int()
-            y2 = (i + ker_size[:,i,j]).round().int()
-            z1 = j
-            z2 = (j + ker_size[:,i,j]).round().int()
-            # print('1,',i,j,y1,y2,z1,z2)
-            # y1.unsqueeze(1)
+            y1 = (i - ker_size[:,i,j]).round()
+            y2 = (i + ker_size[:,i,j]).round()
+            z1 = torch.tensor([j] * b, dtype=ker_size.dtype, device=device)
+            z2 = (j + ker_size[:,i,j]).round()
 
-            if y1==y2: 
-                y2=y2+1
+            if False:
+                if y1 == y2:
+                    y2 = y2 + 1
 
-            if z1==z2: 
-                z2=z2+1
+                if z1 == z2:
+                    z2 = z2 + 1
+            else:
+                y2[y1 == y2] += 1
+                z2[z1 == z2] += 1
 
-            y1 = y1.clamp(0, h-1).cpu().numpy()
-            y2 = y2.clamp(0, h-1).cpu().numpy()
-        
-            z2 = z2.clamp(0, w-1).cpu().numpy()
-            # print('2',i,j,y1,y2,z1,z2)
+            y1 = y1.clamp(0, h-1).cpu().numpy().astype(np.long)
+            y2 = y2.clamp(0, h-1).cpu().numpy().astype(np.long)
+            z1 = z1.clamp(0, w-1).cpu().numpy().astype(np.long)
+            z2 = z2.clamp(0, w-1).cpu().numpy().astype(np.long)
 
-            #Synthesizing Left Image    
-            img_left[:,:,y1,z1]=img_left[:,:,y1,z1]+RGB_img[:,:,i,j].unsqueeze(2)
-            img_left[:,:,y2,z1]=img_left[:,:,y2,z1]-RGB_img[:,:,i,j].unsqueeze(2)
-            img_left[:,:,y1,z2]=img_left[:,:,y1,z2]-RGB_img[:,:,i,j].unsqueeze(2)
-            img_left[:,:,y2,z2]=img_left[:,:,y2,z2]+RGB_img[:,:,i,j].unsqueeze(2)            
+            # Synthesizing Left Image
+            img_left[:,:,y1,z1] = img_left[:,:,y1,z1] + RGB_img[:,:,i,j].unsqueeze(2)
+            img_left[:,:,y2,z1] = img_left[:,:,y2,z1] - RGB_img[:,:,i,j].unsqueeze(2)
+            img_left[:,:,y1,z2] = img_left[:,:,y1,z2] - RGB_img[:,:,i,j].unsqueeze(2)
+            img_left[:,:,y2,z2] = img_left[:,:,y2,z2] + RGB_img[:,:,i,j].unsqueeze(2)
 
-            count_left[:,:,y1,z1]= count_left[:,:,y1,z1]+1
-            count_left[:,:,y2,z1]= count_left[:,:,y2,z1]-1
-            count_left[:,:,y1,z2]= count_left[:,:,y1,z2]-1
-            count_left[:,:,y2,z2]= count_left[:,:,y2,z2]+1
+            count_left[:,:,y1,z1] = count_left[:,:,y1,z1] + 1
+            count_left[:,:,y2,z1] = count_left[:,:,y2,z1] - 1
+            count_left[:,:,y1,z2] = count_left[:,:,y1,z2] - 1
+            count_left[:,:,y2,z2] = count_left[:,:,y2,z2] + 1
 
-            # z1 = j
-            z2 = (j - ker_size[:,i,j]).round().int()
+            z1 = torch.tensor([j] * b, dtype=ker_size.dtype, device=device)
+            z2 = (j - ker_size[:,i,j]).round()
 
-            if z1==z2: 
-                z2=z2-1
+            if False:
+                if z1 == z2:
+                    z2 = z2 - 1
+            else:
+                z2[z1 == z2] -= 1
 
-            # z1 = z1.clamp(0, w-1).cpu().numpy()
-            z2 = z2.clamp(0, w-1).cpu().numpy()
+            z1 = z1.clamp(0, w-1).cpu().numpy().astype(np.long)
+            z2 = z2.clamp(0, w-1).cpu().numpy().astype(np.long)
 
-            #Synthesizing Right Image                
+            # Synthesizing Right Image
+            img_right[:,:,y1,z1] = img_right[:,:,y1,z1] + RGB_img[:,:,i,j].unsqueeze(2)
+            img_right[:,:,y2,z1] = img_right[:,:,y2,z1] - RGB_img[:,:,i,j].unsqueeze(2)
+            img_right[:,:,y1,z2] = img_right[:,:,y1,z2] - RGB_img[:,:,i,j].unsqueeze(2)
+            img_right[:,:,y2,z2] = img_right[:,:,y2,z2] + RGB_img[:,:,i,j].unsqueeze(2)
 
-            img_right[:,:,y1,z1]=img_right[:,:,y1,z1]+RGB_img[:,:,i,j].unsqueeze(2)
-            img_right[:,:,y2,z1]=img_right[:,:,y2,z1]-RGB_img[:,:,i,j].unsqueeze(2)
-            img_right[:,:,y1,z2]=img_right[:,:,y1,z2]-RGB_img[:,:,i,j].unsqueeze(2)
-            img_right[:,:,y2,z2]=img_right[:,:,y2,z2]+RGB_img[:,:,i,j].unsqueeze(2)
+            count_right[:,:,y1,z1] = count_right[:,:,y1,z1] + 1
+            count_right[:,:,y2,z1] = count_right[:,:,y2,z1] - 1
+            count_right[:,:,y1,z2] = count_right[:,:,y1,z2] - 1
+            count_right[:,:,y2,z2] = count_right[:,:,y2,z2] + 1
 
-
-            count_right[:,:,y1,z1]= count_right[:,:,y1,z1]+1
-            count_right[:,:,y2,z1]= count_right[:,:,y2,z1]-1
-            count_right[:,:,y1,z2]= count_right[:,:,y1,z2]-1
-            count_right[:,:,y2,z2]= count_right[:,:,y2,z2]+1
-
-    # print(img_left.size(),count_left.size()) #((1, 3, 192, 192), (1, 1, 192, 192))
-    integral_image=(cv2.integral(255*img_left.squeeze().cpu().detach().numpy().transpose(1, 2, 0)))
-    # print('integral_image', integral_image.shape)
-    integral_count=(cv2.integral(255*count_left.squeeze().cpu().detach().numpy()))
-    # print('integral_count', integral_count.shape)
+    integral_image = (cv2.integral(255 * img_left.squeeze().cpu().detach().numpy().transpose(1, 2, 0)))
+    integral_count = (cv2.integral(255 * count_left.squeeze().cpu().detach().numpy()))
     integral_image = torch.from_numpy(integral_image).permute(2, 0, 1).float().unsqueeze(0) / 255
-    integral_count = torch.from_numpy(integral_count).unsqueeze(0).unsqueeze(1) / 255
-    # print(integral_image.shape,integral_count.shape)
-    integral_count = integral_count#.clamp(1e-4, 1)
-    # print(integral_count.min())
-    im_left = (integral_image/integral_count).clamp(-0.5, 0.5)
- 
+    integral_count = torch.from_numpy(integral_count).float().unsqueeze(0).unsqueeze(1) / 255
+    integral_count = integral_count  # .clamp(1e-4, 1)
+    im_left = (integral_image / integral_count).clamp(-0.5, 0.5)
 
-    integral_image=(cv2.integral(255*img_right.squeeze().cpu().detach().numpy().transpose(1, 2, 0)))
-    integral_count=(cv2.integral(255*count_right.squeeze().cpu().detach().numpy()))
+    integral_image = (cv2.integral(255 * img_right.squeeze().cpu().detach().numpy().transpose(1, 2, 0)))
+    integral_count = (cv2.integral(255 * count_right.squeeze().cpu().detach().numpy()))
     integral_image = torch.from_numpy(integral_image).permute(2, 0, 1).float().unsqueeze(0) / 255
-    integral_count = torch.from_numpy(integral_count).unsqueeze(0).unsqueeze(1) / 255
-    integral_count = integral_count#.clamp(1e-4, 1)
+    integral_count = torch.from_numpy(integral_count).float().unsqueeze(0).unsqueeze(1) / 255
+    integral_count = integral_count  # .clamp(1e-4, 1)
 
-    im_right = (integral_image/integral_count).clamp(-0.5, 0.5)
+    im_right = (integral_image / integral_count).clamp(-0.5, 0.5)
 
-    return im_left[:,:,:-1,:-1].cuda(),im_right[:,:,:-1,:-1].cuda()
+    return im_left[:,:,:-1,:-1].cuda(), im_right[:,:,:-1,:-1].cuda()
+
+
+if __name__ == '__main__':
+    if False:  # some errors
+        b, c, h, w, num_disps = 1, 3, 32, 64, 16
+        RGB_img = torch.randint(0, 255, size=(b, c, h, w), dtype=torch.float32)
+        depth = torch.randint(0, num_disps, size=(b, h, w), dtype=torch.float32, requires_grad=True)
+        img_left, img_right = simdp(RGB_img, depth)
+        loss = (img_left + img_right).sum()
+        depth.retain()
+        loss.backward()
+        print(depth.grad.shape)
+
+    if True:
+        image = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], dtype=torch.float32).view(1, 1, 2, 4)
+        depth = torch.tensor([[[1./4, 1./4, 1./4, 1./4], [1./4, 1./4, 1./4, 1./4]]],
+                             dtype=torch.float32, requires_grad=True)
+
+        x_base = torch.linspace(0, 1, 4).repeat(1, 2, 1)
+        y_base = torch.linspace(0, 1, 2).repeat(1, 4, 1).transpose(2, 1)
+        flow_field = torch.stack((x_base + depth, y_base), dim=3)
+        output = torch.nn.functional.grid_sample(image, 2 * flow_field - 1, mode='bilinear', padding_mode='zeros')
+        loss = output.sum()
+        depth.retain_grad()
+        loss.backward()
+        print(depth.shape, output.flatten(), depth.grad.flatten())  # this depth.grad is the same as my manual values

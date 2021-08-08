@@ -61,11 +61,12 @@ if __name__ == '__main__':
             # Call CUDA function
             torch.cuda.synchronize()
             time_start = time.time()
-            DualPixel.DepthMerge(image, depth, left_img_count, right_img_count, left_img_stack, right_img_stack)
-            torch.cuda.synchronize()
 
+            DualPixel.DepthMerge(image, depth, left_img_count, right_img_count, left_img_stack, right_img_stack)
+
+            torch.cuda.synchronize()
             duration = time.time() - time_start
-            time_sum = time_sum + duration if (loop_idx > 0) else time_sum
+            time_sum += duration if (loop_idx > 0) else time_sum
 
         print('Average CUDA time: {:.4f}ms.'.format(time_sum * 1.0e3 / (loops - 1)))
 
