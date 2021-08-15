@@ -13,7 +13,7 @@ try:
     set_start_method('spawn')
 except RuntimeError:
     pass
-import skimage.transform 
+import skimage.transform
 
 def simdp(RGB_img, depth, image_left=None, image_right=None):
     cpsize = 5
@@ -133,3 +133,4 @@ if __name__ == '__main__':
         depth.retain_grad()
         loss.backward()
         print(depth.shape, output.flatten(), depth.grad.flatten())  # this depth.grad is the same as my manual values
+
