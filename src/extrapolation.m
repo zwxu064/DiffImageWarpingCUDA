@@ -1,18 +1,20 @@
 function [img_list, count_list, y_int_list, z_int_list] = ...
-  extrapolation(y, z, h, w, src_pixel, is_positive)
+  extrapolation(y, z, h, w, src_pixel)
     img_list = {};
     count_list = {};
     y_int_list = {};
     z_int_list = {};
-
-    y_int_loop = unique([floor(y), ceil(y)]);
-    z_int_loop = unique([floor(z), ceil(z)]);
     
     % This is to assign to the nearest neighbour
     % if enable this, in the loops below, should have a condition weight==1
     if false
-      y = round(y);
-      z = round(z);
+      y = floor(y);
+      z = floor(z);
+      y_int_loop = unique([floor(y)]);
+      z_int_loop = unique([floor(z)]);
+    else
+      y_int_loop = unique([floor(y), ceil(y)]);
+      z_int_loop = unique([floor(z), ceil(z)]);
     end
     
     for i = 1 : length(y_int_loop)
@@ -26,13 +28,8 @@ function [img_list, count_list, y_int_list, z_int_list] = ...
             y_int = max(1, min(y_int, h));
             z_int = max(1, min(z_int, w));
 
-            if is_positive
-                img_v = weight * src_pixel;
-                count_v = weight;
-            else
-                img_v = -weight * src_pixel;
-                count_v = -weight;
-            end
+            img_v = weight * src_pixel;
+            count_v = weight;
 
             img_list{end+1} = img_v;
             count_list{end+1} = count_v;

@@ -42,6 +42,13 @@ count_right = zeros(size(d));
 k_size = floor((1-(F./d)) * aperture_size);
 
 tic;
+RGB_img = single(RGB_img);
+k_size = single(k_size);
+img_left =single(img_left);
+img_right = single(img_right);
+count_left = single(count_left);
+count_right = single(count_right);
+
 for i = 1 : h % x
     for j = 1 : w %y
         ksizetb = k_size(i,j);
@@ -53,18 +60,18 @@ for i = 1 : h % x
         z2 = j + ksizetb / 2;
         
         if false
-            if round(y1) == round(y2)
+            if floor(y1) == floor(y2)
                 y2 = y2 + 1;
             end
 
-            if round(z1) == round(z2)
+            if floor(z1) == floor(z2)
                 z2 = z2 + 1;
             end
         end
         
         % Synthesizing Left Image      
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y1, z1, h, w, RGB_img(i, j, :), true);
+          extrapolation(y1, z1, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
@@ -73,25 +80,25 @@ for i = 1 : h % x
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y2, z1, h, w, RGB_img(i, j, :), false);
+          extrapolation(y2, z1, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
-            img_left(y_int, z_int, :) = img_left(y_int, z_int, :) + img_v_list{idx};
-            count_left(y_int, z_int, :) = count_left(y_int, z_int, :) + count_v_list{idx};
+            img_left(y_int, z_int, :) = img_left(y_int, z_int, :) - img_v_list{idx};
+            count_left(y_int, z_int, :) = count_left(y_int, z_int, :) - count_v_list{idx};
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y1, z2, h, w, RGB_img(i, j, :), false);
+          extrapolation(y1, z2, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
-            img_left(y_int, z_int, :) = img_left(y_int, z_int, :) + img_v_list{idx};
-            count_left(y_int, z_int, :) = count_left(y_int, z_int, :) + count_v_list{idx};
+            img_left(y_int, z_int, :) = img_left(y_int, z_int, :) - img_v_list{idx};
+            count_left(y_int, z_int, :) = count_left(y_int, z_int, :) - count_v_list{idx};
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y2, z2, h, w, RGB_img(i, j, :), true);
+          extrapolation(y2, z2, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
@@ -104,13 +111,13 @@ for i = 1 : h % x
         z2 = j - ksizetb / 2;
 
         if false
-            if z1 == z2 
+            if floor(z1) == floor(z2)
                 z2 = z2 - 1;
             end
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y1, z1, h, w, RGB_img(i, j, :), true);
+          extrapolation(y1, z1, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
@@ -119,25 +126,25 @@ for i = 1 : h % x
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y2, z1, h, w, RGB_img(i, j, :), false);
+          extrapolation(y2, z1, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
-            img_right(y_int, z_int, :) = img_right(y_int, z_int, :) + img_v_list{idx};
-            count_right(y_int, z_int, :) = count_right(y_int, z_int, :) + count_v_list{idx};
+            img_right(y_int, z_int, :) = img_right(y_int, z_int, :) - img_v_list{idx};
+            count_right(y_int, z_int, :) = count_right(y_int, z_int, :) - count_v_list{idx};
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y1, z2, h, w, RGB_img(i, j, :), false);
+          extrapolation(y1, z2, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
-            img_right(y_int, z_int, :) = img_right(y_int, z_int, :) + img_v_list{idx};
-            count_right(y_int, z_int, :) = count_right(y_int, z_int, :) + count_v_list{idx};
+            img_right(y_int, z_int, :) = img_right(y_int, z_int, :) - img_v_list{idx};
+            count_right(y_int, z_int, :) = count_right(y_int, z_int, :) - count_v_list{idx};
         end
         
         [img_v_list, count_v_list, y_int_list, z_int_list] = ...
-          extrapolation(y2, z2, h, w, RGB_img(i, j, :), true);
+          extrapolation(y2, z2, h, w, RGB_img(i, j, :));
         for idx = 1 : length(y_int_list)
             y_int = y_int_list{idx};
             z_int = z_int_list{idx};
@@ -147,6 +154,9 @@ for i = 1 : h % x
     end
 end
 toc
+
+save('data/matlab.mat', 'img_left', 'img_right', ...
+  'count_left', 'count_right', 'RGB_img', 'k_size')
 
 if false  % Zhiwei dump input and output data for CUDA test
     count_left_nonzero = single(count_left);
