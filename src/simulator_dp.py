@@ -14,124 +14,9 @@ try:
 except RuntimeError:
     pass
 import scipy.io as scio
+from dp_autodiff import simdp_extrapol, simdp_extrapol_back
 
 
-# Zhiwei
-def extrapolation(y, z, h, w, src_pixel):
-    img_list, count_list, y_int_list, z_int_list = [], [], [], []
-
-    if True:
-        y_int_loop = torch.unique(torch.cat([torch.floor(y).detach(), torch.ceil(y).detach()], dim=0))
-        z_int_loop = torch.unique(torch.cat([torch.floor(z).detach(), torch.ceil(z).detach()], dim=0))
-    else:
-        # Note: torch.round() to the even intergral on both CPU and GPU,
-        # so use floor to compare with CUDA and MatLab
-        y_int_loop = torch.unique(torch.cat([torch.floor(y).detach()], dim=0))
-        z_int_loop = torch.unique(torch.cat([torch.floor(z).detach()], dim=0))
-        y = torch.floor(y)
-        z = torch.floor(z)
-
-    for y_int in y_int_loop:
-        for z_int in z_int_loop:
-            y_weight = 1 - abs(y_int - y)
-            z_weight = 1 - abs(z_int - z)
-            weight = y_weight * z_weight
-
-            # Note: rename y_int and z_int
-            # Note: this clamp assigns values to edges for final accumulated images
-            y_int_valid = torch.clamp(y_int, 0, h - 1)
-            z_int_valid = torch.clamp(z_int, 0, w - 1)
-
-            img_v = weight * src_pixel
-            count_v = weight
-
-            img_list.append(img_v)
-            count_list.append(count_v)
-            y_int_list.append(y_int_valid.long())
-            z_int_list.append(z_int_valid.long())
-
-    return img_list, count_list, y_int_list, z_int_list
-
-
-# Zhiwei
-def simdp_extrapol(RGB_img, depth):
-    ker_size = depth
-    S = np.shape(depth)
-    b = S[0]
-    h = S[1]
-    w = S[2]
-    device = RGB_img.device
-    dtype = RGB_img.dtype
-
-    img_left = torch.zeros([b, 3, h, w], dtype=dtype).to(device)
-    count_left = torch.zeros([b, 1, h, w], dtype=dtype).to(device)
-    img_right = torch.zeros([b, 3, h, w], dtype=dtype).to(device)
-    count_right = torch.zeros([b, 1, h, w], dtype=dtype).to(device)
-
-    for i in range(h):
-        for j in range(w):
-            y1 = i - ker_size[:, i, j]
-            y2 = i + ker_size[:, i, j]
-            z1 = torch.tensor([j] * b, dtype=dtype, device=device)
-            z2 = j + ker_size[:, i, j]
-
-            # Synthesizing Left Image
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y1, z1, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_left[:, :, y_int, z_int] = img_left[:, :, y_int, z_int] + img_v
-                count_left[:, :, y_int, z_int] = count_left[:, :, y_int, z_int] + count_v
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y2, z1, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_left[:, :, y_int, z_int] = img_left[:, :, y_int, z_int] - img_v
-                count_left[:, :, y_int, z_int] = count_left[:, :, y_int, z_int] - count_v
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y1, z2, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_left[:, :, y_int, z_int] = img_left[:, :, y_int, z_int] - img_v
-                count_left[:, :, y_int, z_int] = count_left[:, :, y_int, z_int] - count_v
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y2, z2, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_left[:, :, y_int, z_int] = img_left[:, :, y_int, z_int] + img_v
-                count_left[:, :, y_int, z_int] = count_left[:, :, y_int, z_int] + count_v
-
-            # Synthesizing Right Image
-            z1 = torch.tensor([j] * b, dtype=dtype, device=device)
-            z2 = j - ker_size[:, i, j]
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y1, z1, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_right[:, :, y_int, z_int] = img_right[:, :, y_int, z_int] + img_v
-                count_right[:, :, y_int, z_int] = count_right[:, :, y_int, z_int] + count_v
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y2, z1, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_right[:, :, y_int, z_int] = img_right[:, :, y_int, z_int] - img_v
-                count_right[:, :, y_int, z_int] = count_right[:, :, y_int, z_int] - count_v
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y1, z2, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_right[:, :, y_int, z_int] = img_right[:, :, y_int, z_int] - img_v
-                count_right[:, :, y_int, z_int] = count_right[:, :, y_int, z_int] - count_v
-
-            img_v_list, count_v_list, y_int_list, z_int_list = \
-                extrapolation(y2, z2, h, w, RGB_img[:, :, i, j])
-            for img_v, count_v, y_int, z_int in zip(img_v_list, count_v_list, y_int_list, z_int_list):
-                img_right[:, :, y_int, z_int] = img_right[:, :, y_int, z_int] + img_v
-                count_right[:, :, y_int, z_int] = count_right[:, :, y_int, z_int] + count_v
-
-    return img_left, img_right, count_left, count_right
-
-
-# Liyuan
 def simdp(RGB_img, depth, image_left=None, image_right=None):
     cpsize = 5
     # depth_scaled = depth*5.0/(depth.max())
@@ -232,12 +117,14 @@ def simdp(RGB_img, depth, image_left=None, image_right=None):
 if __name__ == '__main__':
     if True:  # some errors
         torch.manual_seed(0)
-        torch.cuda.manual_seed(0)
 
         enable_extrapol = True
-        enable_load_matlab = True
+        enable_load_matlab = False
         enable_cuda = False
-        enable_gradient = False
+        enable_gradient = True
+
+        if enable_cuda:
+            torch.cuda.manual_seed(0)
 
         if enable_load_matlab:
             obj = scio.loadmat('data/matlab.mat')
@@ -258,8 +145,8 @@ if __name__ == '__main__':
                   count_left_gt.abs().sum(), count_right_gt.abs().sum())
         else:
             b, c, h, w, num_disps = 1, 3, 32, 64, 16
-            RGB_img = torch.randn(size=(b, c, h, w), dtype=torch.float32)
-            depth = torch.randn(size=(b, h, w), dtype=torch.float32, requires_grad=enable_gradient)
+            RGB_img = torch.rand(size=(b, c, h, w), dtype=torch.float32)
+            depth = torch.rand(size=(b, h, w), dtype=torch.float32, requires_grad=enable_gradient) * num_disps
             depth_in = depth
 
         time_start = time.time()
@@ -272,23 +159,61 @@ if __name__ == '__main__':
         duration = time.time() - time_start
 
         if enable_load_matlab:
-            print('Check:', (img_left.cpu() - img_left_gt).abs().max(),
+            print('Check forward:', (img_left.cpu() - img_left_gt).abs().max(),
                   (count_left.cpu() - count_left_gt).abs().max(),
                   (img_right.cpu() - img_right_gt).abs().max(),
                   (count_right.cpu() - count_right_gt).abs().max(),
                   duration)
         else:
-            print('Check:', img_left.abs().sum(), img_right.abs().sum(),
+            print('Check forward:', img_left.abs().sum(), img_right.abs().sum(),
                   count_left.abs().sum(), count_right.abs().sum(),
                   duration)
 
         if enable_gradient:
-            loss = (img_left + img_right).sum()
+            if True:
+                count_left_clone = count_left.clone()
+                count_right_clone = count_right.clone()
+                count_left_clone[count_left_clone == 0] = 1
+                count_right_clone[count_right_clone == 0] = 1
+            else:  # this will change count_left gradients, not much difference
+                count_left[count_left == 0] = 1
+                count_right[count_right == 0] = 1
+
+            if True:
+                loss = (img_left / count_left_clone + img_right / count_right_clone).mean()
+            else:  # for debug
+                loss = 0
+                loss += (img_left * torch.rand(img_left.shape)).sum()
+                loss += (img_right * torch.rand(img_right.shape)).sum()
+                loss += (count_left_clone * torch.rand(count_left_clone.shape)).sum()
+                loss += (count_right_clone * torch.rand(count_right_clone.shape)).sum()
+                loss = 1000 * loss
+
             depth.retain_grad()
+            img_left.retain_grad()
+            img_right.retain_grad()
+            count_left.retain_grad()
+            count_right.retain_grad()
+
+            # Get autodiff
             time_start = time.time()
             loss.backward()
             duration = time.time() - time_start
-            print('Gradient:', depth.grad.shape, depth.grad.min(), depth.grad.max(), duration)
+
+            # Check manual
+            dimg_left = img_left.grad if (img_left.grad is not None) else torch.zeros_like(img_left)
+            dimg_right = img_right.grad if (img_right.grad is not None) else torch.zeros_like(img_right)
+            dcount_left = count_left.grad if (count_left.grad is not None) else torch.zeros_like(count_left)
+            dcount_right = count_right.grad if (count_right.grad is not None) else torch.zeros_like(count_right)
+
+            time_start = time.time()
+            ddepth_manual = simdp_extrapol_back(RGB_img, depth_in, dimg_left, dimg_right, dcount_left, dcount_right)
+            duration = time.time() - time_start
+
+            print('Check backward:', (depth.grad - ddepth_manual).abs().max(),
+                  depth.grad.min(), depth.grad.max(),
+                  ddepth_manual.min(), ddepth_manual.max(),
+                  duration)
 
     if False:
         image = torch.tensor([[1, 2, 3, 4], [5, 6, 7, 8]], dtype=torch.float32).view(1, 1, 2, 4)
