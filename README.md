@@ -18,7 +18,7 @@
   
       ```
       cd [your code root]/DualPixelCUDA/src
-      vim ~/.compile.sh
+      vim .compile.sh
       replace "~/Install/DualPixel" by "[your path]/Install/DualPixel" above
       ```
   
@@ -38,7 +38,7 @@
   
     ![alt text](doc/dual_pixel.jpg)
   
-  - Module is in [src/dp_module.py](src/dp_module.py) with a demo in [src/unittest/test_dp_module.py](src/unittest/test_dp_module.py)
+  - Module is in [src/dp_module.py](src/dp_module.py) with a demo in [src/unittest/test_dp_module.py](src/unittest/test_dp_module.py).
       ```
       cd src/unittest
       python test_dp_module.py
@@ -64,9 +64,9 @@
     in backward 103143.14.
     This clarify the following max errors are caused by
     **round error of single-floating point operation**.
-    For instance, with say around 7-digit precision,
-    103143 has 1-digit
-    tolerance in decimal; 187 has 4-digit tolerance in decimal.
+    For instance, with say around 8-digit precision,
+    103143 has 2-digit
+    tolerance in decimal; 187 has 5-digit tolerance in decimal.
     This is mainly caused by the order of sum operations in CUDA.
     
      | | PyTorch GPU | CUDA
