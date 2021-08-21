@@ -34,7 +34,7 @@
   to intensity weight (details are in
   [doc/CUDA_implementation.pdf](doc/CUDA_implementation.pdf)
   and [MatLab demo](src/matlab/simulator_dp_extrapol.m)
-  in constrast to [non-differentiable nearest version](src/matlab/simulator_dp.m)), see below.
+  in contrast to [non-differentiable nearest version](src/matlab/simulator_dp.m)), see below.
   
     ![alt text](doc/dual_pixel.jpg)
   
