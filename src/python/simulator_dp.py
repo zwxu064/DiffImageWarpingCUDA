@@ -113,11 +113,11 @@ def simdp(RGB_img, depth, image_left=None, image_right=None):
 if __name__ == '__main__':
     torch.manual_seed(0)
 
-    enable_extrapol = True
     enable_load_matlab = True  # enable for real data; otherwise, random data
     enable_cuda = True
     enable_gradient = True
-    enable_pytorch_manual = True  # this will be super slow
+    enable_pytorch_manual = True  # forward, this will be slow
+    enable_pytorch_manual_back = True  # backward, this will be super slow
     enable_cuda_implement = True
 
     enable_gradient = False if (not enable_pytorch_manual) else enable_gradient
@@ -136,12 +136,11 @@ if __name__ == '__main__':
         count_left_gt = torch.from_numpy(obj['count_left']).float().unsqueeze(0)
         count_right_gt = torch.from_numpy(obj['count_right']).float().unsqueeze(0)
         depth.requires_grad = True if enable_gradient else False
-        depth_in = depth / 2
         b, c, h, w = RGB_img.shape
 
         if enable_cuda:
             RGB_img = RGB_img.cuda()
-            depth_in = depth_in.cuda()
+            depth = depth.cuda()
 
         print('GT:',
               img_left_gt.abs().sum().numpy(),
@@ -152,78 +151,72 @@ if __name__ == '__main__':
         b, c, h, w, num_disps = 8, 3, 32, 64, 32
         RGB_img = torch.rand(size=(b, c, h, w), dtype=torch.float32)
         depth = torch.rand(size=(b, h, w), dtype=torch.float32, requires_grad=enable_gradient) * num_disps
-        depth_in = depth
 
-    if enable_extrapol:
-        img_left, img_right, count_left, count_right = None, None, None, None
+    img_left, img_right, count_left, count_right = None, None, None, None
 
-        if enable_pytorch_manual:
-            time_start = time.time()
-            img_left, img_right, count_left, count_right = simdp_extrapol(RGB_img, depth_in)
-            duration = time.time() - time_start
-
-            print('Max self forward: img left: {:.8f}, right: {:.8f}; '
-                  'count left: {:.8f}, right: {:.8f}; time: {:.6f}s'.format(
-                img_left.cpu().detach().abs().max().numpy(),
-                img_right.cpu().detach().abs().max().numpy(),
-                count_left.cpu().detach().abs().max().numpy(),
-                count_right.cpu().detach().abs().max().numpy(),
-                duration))
-
-        if enable_cuda_implement:
-            device = RGB_img.device
-            RGB_img_permute = RGB_img.permute(0, 2, 3, 1).contiguous()
-            depth_in = depth_in.contiguous()
-            RGB_img_permute_cu = RGB_img_permute.cuda()
-            depth_in_cu = depth_in.cuda()
-            duration_cuda = 0
-
-            for idx in range(1000):
-                count_left_cu = torch.zeros(b, h, w, dtype=torch.float32, device='cuda')
-                count_right_cu = torch.zeros(b, h, w, dtype=torch.float32, device='cuda')
-                img_left_cu = RGB_img.new_zeros(size=(b, h, w, c), device='cuda')
-                img_right_cu = RGB_img.new_zeros(size=(b, h, w, c), device='cuda')
-                assert count_left_cu.is_contiguous() and count_right_cu.is_contiguous()
-                assert img_left_cu.is_contiguous() and img_right_cu.is_contiguous()
-
-                torch.cuda.synchronize()
-                time_start = time.time()
-                DualPixel.DepthMerge(RGB_img_permute_cu,
-                                     depth_in_cu,
-                                     count_left_cu,
-                                     count_right_cu,
-                                     img_left_cu,
-                                     img_right_cu)
-                torch.cuda.synchronize()
-                duration_cuda += time.time() - time_start
-
-            duration_cuda /= 1000
-
-            img_left_cu = img_left_cu.permute(0, 3, 1, 2).contiguous()
-            img_right_cu = img_right_cu.permute(0, 3, 1, 2).contiguous()
-
-            if enable_load_matlab:
-                print('Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
-                      'right img: {:.8f}, count: {:.8f}; max left img: {:.8f}, max right img: {:.8f}; '
-                      'time: {:.6f}s'.format(
-                      (img_left_cu.cpu() - img_left_gt).abs().max().numpy(),
-                      (count_left_cu.cpu() - count_left_gt).abs().max().numpy(),
-                      (img_right_cu.cpu() - img_right_gt).abs().max().numpy(),
-                      (count_right_cu.cpu() - count_right_gt).abs().max().numpy(),
-                      img_left_cu.cpu().abs().max(), img_right_cu.cpu().abs().max(),
-                      duration_cuda))
-            elif img_left is not None:
-                print('Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
-                      'right img: {:.8f}, count: {:.8f}; time: {:.6f}s'.format(
-                      (img_left_cu.cpu() - img_left.detach()).abs().max().numpy(),
-                      (count_left_cu.cpu() - count_left.detach()).abs().max().numpy(),
-                      (img_right_cu.cpu() - img_right.detach()).abs().max().numpy(),
-                      (count_right_cu.cpu() - count_right.detach()).abs().max().numpy(),
-                      duration_cuda))
-    else:
+    if enable_pytorch_manual:
         time_start = time.time()
-        _, _, img_left, img_right, count_left, count_right = simdp(RGB_img, depth_in)
+        img_left, img_right, count_left, count_right = simdp_extrapol(RGB_img, depth)
         duration = time.time() - time_start
+
+        print('Max self forward: img left: {:.8f}, right: {:.8f}; '
+              'count left: {:.8f}, right: {:.8f}; time: {:.6f}s'.format(
+            img_left.cpu().detach().abs().max().numpy(),
+            img_right.cpu().detach().abs().max().numpy(),
+            count_left.cpu().detach().abs().max().numpy(),
+            count_right.cpu().detach().abs().max().numpy(),
+            duration))
+
+    if enable_cuda_implement:
+        device = RGB_img.device
+        RGB_img_permute = RGB_img.permute(0, 2, 3, 1).contiguous()
+        depth = depth.contiguous()
+        RGB_img_permute_cu = RGB_img_permute.cuda()
+        depth_cu = depth.cuda()
+        duration_cuda = 0
+
+        for idx in range(1000):
+            count_left_cu = torch.zeros(b, h, w, dtype=torch.float32, device='cuda')
+            count_right_cu = torch.zeros(b, h, w, dtype=torch.float32, device='cuda')
+            img_left_cu = RGB_img.new_zeros(size=(b, h, w, c), device='cuda')
+            img_right_cu = RGB_img.new_zeros(size=(b, h, w, c), device='cuda')
+            assert count_left_cu.is_contiguous() and count_right_cu.is_contiguous()
+            assert img_left_cu.is_contiguous() and img_right_cu.is_contiguous()
+
+            torch.cuda.synchronize()
+            time_start = time.time()
+            DualPixel.DepthMerge(RGB_img_permute_cu,
+                                 depth_cu,
+                                 count_left_cu,
+                                 count_right_cu,
+                                 img_left_cu,
+                                 img_right_cu)
+            torch.cuda.synchronize()
+            duration_cuda += time.time() - time_start
+
+        duration_cuda /= 1000
+
+        img_left_cu = img_left_cu.permute(0, 3, 1, 2).contiguous()
+        img_right_cu = img_right_cu.permute(0, 3, 1, 2).contiguous()
+
+        if enable_load_matlab:
+            print('Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
+                  'right img: {:.8f}, count: {:.8f}; max left img: {:.8f}, max right img: {:.8f}; '
+                  'time: {:.6f}s'.format(
+                  (img_left_cu.cpu() - img_left_gt).abs().max().numpy(),
+                  (count_left_cu.cpu() - count_left_gt).abs().max().numpy(),
+                  (img_right_cu.cpu() - img_right_gt).abs().max().numpy(),
+                  (count_right_cu.cpu() - count_right_gt).abs().max().numpy(),
+                  img_left_cu.cpu().abs().max(), img_right_cu.cpu().abs().max(),
+                  duration_cuda))
+        elif img_left is not None:
+            print('Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
+                  'right img: {:.8f}, count: {:.8f}; time: {:.6f}s'.format(
+                  (img_left_cu.cpu() - img_left.detach()).abs().max().numpy(),
+                  (count_left_cu.cpu() - count_left.detach()).abs().max().numpy(),
+                  (img_right_cu.cpu() - img_right.detach()).abs().max().numpy(),
+                  (count_right_cu.cpu() - count_right.detach()).abs().max().numpy(),
+                  duration_cuda))
 
     if (img_left is not None) and enable_load_matlab:
         print('Check PyTorch forward: diff left img: {:.8f}, count: {:.8f}; '
@@ -271,27 +264,29 @@ if __name__ == '__main__':
               depth.grad.max().detach().numpy(),
               duration))
 
+        if enable_gradient:
+            dimg_left = img_left.grad if (img_left.grad is not None) else torch.zeros_like(img_left)
+            dimg_right = img_right.grad if (img_right.grad is not None) else torch.zeros_like(img_right)
+            dcount_left = count_left.grad if (count_left.grad is not None) else torch.zeros_like(count_left)
+            dcount_right = count_right.grad if (count_right.grad is not None) else torch.zeros_like(count_right)
+
         # Check manual back
-        dimg_left = img_left.grad if (img_left.grad is not None) else torch.zeros_like(img_left)
-        dimg_right = img_right.grad if (img_right.grad is not None) else torch.zeros_like(img_right)
-        dcount_left = count_left.grad if (count_left.grad is not None) else torch.zeros_like(count_left)
-        dcount_right = count_right.grad if (count_right.grad is not None) else torch.zeros_like(count_right)
+        if enable_pytorch_manual_back:
+            time_start = time.time()
+            ddepth_manual = simdp_extrapol_back(RGB_img,
+                                                depth,
+                                                dimg_left,
+                                                dimg_right,
+                                                dcount_left,
+                                                dcount_right)
+            duration = time.time() - time_start
 
-        time_start = time.time()
-        ddepth_manual = simdp_extrapol_back(RGB_img,
-                                            depth_in,
-                                            dimg_left,
-                                            dimg_right,
-                                            dcount_left,
-                                            dcount_right)
-        duration = time.time() - time_start
-
-        print('Check manual backward: diff: {:.8f}; '
-              'min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
-              (depth.grad - ddepth_manual).abs().max().detach().numpy(),
-              ddepth_manual.min().detach().numpy(),
-              ddepth_manual.max().detach().numpy(),
-              duration))
+            print('Check manual backward: diff: {:.8f}; '
+                  'min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
+                  (depth.grad - ddepth_manual).abs().max().detach().numpy(),
+                  ddepth_manual.min().detach().numpy(),
+                  ddepth_manual.max().detach().numpy(),
+                  duration))
 
         # Check CUDA back
         if enable_cuda_implement:
@@ -300,7 +295,7 @@ if __name__ == '__main__':
             dimg_left_cu = dimg_left.permute(0, 2, 3, 1).cuda()
             dimg_right_cu = dimg_right.permute(0, 2, 3, 1).cuda()
 
-            assert RGB_img_permute.is_contiguous() and depth_in.is_contiguous()
+            assert RGB_img_permute.is_contiguous() and depth.is_contiguous()
             assert dcount_left.is_contiguous() and dcount_right.is_contiguous()
             assert dimg_left.is_contiguous() and dimg_right.is_contiguous()
 
@@ -310,7 +305,7 @@ if __name__ == '__main__':
                 torch.cuda.synchronize()
                 time_start = time.time()
                 DualPixel.DepthMergeBack(RGB_img_permute_cu,
-                                         depth_in_cu,
+                                         depth_cu,
                                          dcount_left_cu,
                                          dcount_right_cu,
                                          dimg_left_cu,

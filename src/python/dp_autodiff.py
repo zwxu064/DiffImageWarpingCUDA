@@ -58,8 +58,8 @@ def simdp_extrapol(RGB_img, depth):
     for b in range(batch):
         for i in range(h):
             for j in range(w):
-                y1 = i - ker_size[b, i, j]
-                y2 = i + ker_size[b, i, j]
+                y1 = i - (ker_size[b, i, j] / 2)
+                y2 = i + (ker_size[b, i, j] / 2)
                 z1 = torch.tensor([j], dtype=dtype, device=device)
                 z2 = j + ker_size[b, i, j]
 
@@ -89,8 +89,8 @@ def simdp_extrapol(RGB_img, depth):
                     count_left[b, y_int, z_int] = count_left[b, y_int, z_int] + count_v
 
                 # Synthesizing Right Image
-                z1 = torch.tensor([j], dtype=dtype, device=device)
-                z2 = j - ker_size[b, i, j]
+                z1 = j - ker_size[b, i, j]
+                z2 = torch.tensor([j], dtype=dtype, device=device)
 
                 img_v_list, count_v_list, y_int_list, z_int_list = \
                     extrapolation(y1, z1, h, w, RGB_img[b, :, i, j])
@@ -162,38 +162,38 @@ def simdp_extrapol_back(RGB_img, depth, dimg_left, dimg_right, dcount_left, dcou
     for b in range(batch):
         for i in range(h):
             for j in range(w):
-                y1 = i - ker_size[b, i, j]
-                y2 = i + ker_size[b, i, j]
+                y1 = i - (ker_size[b, i, j] / 2)
+                y2 = i + (ker_size[b, i, j] / 2)
                 z1 = torch.tensor([j], dtype=dtype, device=device)
                 z2 = j + ker_size[b, i, j]
 
                 # Back Left Image
                 dy1, dz1 = extrapolation_back(y1, z1, h, w, RGB_img[b, :, i, j], True, dimg_left[b], dcount_left[b], i, j)
-                ddepth[b, i, j] = ddepth[b, i, j] - dy1
+                ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1
 
                 dy2, dz1 = extrapolation_back(y2, z1, h, w, RGB_img[b, :, i, j], False, dimg_left[b], dcount_left[b])
-                ddepth[b, i, j] = ddepth[b, i, j] + dy2
+                ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2
 
                 dy1, dz2 = extrapolation_back(y1, z2, h, w, RGB_img[b, :, i, j], False, dimg_left[b], dcount_left[b])
-                ddepth[b, i, j] = ddepth[b, i, j] - dy1 + dz2
+                ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1 + dz2
 
                 dy2, dz2 = extrapolation_back(y2, z2, h, w, RGB_img[b, :, i, j], True, dimg_left[b], dcount_left[b])
-                ddepth[b, i, j] = ddepth[b, i, j] + dy2 + dz2
+                ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2 + dz2
 
                 # Back Right Image
-                z1 = torch.tensor([j], dtype=dtype, device=device)
-                z2 = j - ker_size[b, i, j]
+                z1 = j - ker_size[b, i, j]
+                z2 = torch.tensor([j], dtype=dtype, device=device)
 
                 dy1, dz1 = extrapolation_back(y1, z1, h, w, RGB_img[b, :, i, j], True, dimg_right[b], dcount_right[b])
-                ddepth[b, i, j] = ddepth[b, i, j] - dy1
+                ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1 - dz1
 
                 dy2, dz1 = extrapolation_back(y2, z1, h, w, RGB_img[b, :, i, j], False, dimg_right[b], dcount_right[b])
-                ddepth[b, i, j] = ddepth[b, i, j] + dy2
+                ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2 - dz1
 
                 dy1, dz2 = extrapolation_back(y1, z2, h, w, RGB_img[b, :, i, j], False, dimg_right[b], dcount_right[b])
-                ddepth[b, i, j] = ddepth[b, i, j] - dy1 - dz2
+                ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1
 
                 dy2, dz2 = extrapolation_back(y2, z2, h, w, RGB_img[b, :, i, j], True, dimg_right[b], dcount_right[b])
-                ddepth[b, i, j] = ddepth[b, i, j] + dy2 - dz2
+                ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2
 
     return ddepth

@@ -74,8 +74,6 @@ class DPMergeModule(torch.nn.Module):
         self.enable_right = enable_right
 
     def forward(self, image, depth):
-        depth = depth / 2  # mark down
-
         count_left, count_right, img_left, img_right = \
             DPMergeFunction.apply(image,
                                   depth,

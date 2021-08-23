@@ -59,10 +59,10 @@ for i = 1 : h % x
         ksizetb = k_size(i,j);
 
         % Move round inside extrapolation
-        y1 = i - floor(ksizetb/2);  %-----------------
-        y2 = i + floor(ksizetb/2);  %-----------------
+        y1 = i - ksizetb / 2;  %-----------------
+        y2 = i + ksizetb / 2;  %-----------------
         z1 = j;
-        z2 = j + floor(ksizetb); %-----------------
+        z2 = j + ksizetb; %-----------------
         
         if false
             if floor(y1) == floor(y2)
@@ -112,8 +112,8 @@ for i = 1 : h % x
         end
         
         % Synthesizing Right Image
-        z2 = j;   %----------------- 
-        z1 = j -(ksizetb);   %----------------- 
+        z1 = j - ksizetb;   %-----------------
+        z2 = j;   %-----------------
 
         if false
             if floor(z1) == floor(z2)
