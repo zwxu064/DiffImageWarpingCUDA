@@ -35,7 +35,8 @@ F = min(d(:))-Fd;
 disp = ((d-F)./d).*aperture_size/2; 
 
 %%
-[h,w,~]=size(depth_pixel);
+%%
+[h,w,c]=size(img_name);  %-----------------
 
 img_left = zeros(size(RGB_img));
 count_left = zeros(size(d));
@@ -58,10 +59,10 @@ for i = 1 : h % x
         ksizetb = k_size(i,j);
 
         % Move round inside extrapolation
-        y1 = i - ksizetb / 2;
-        y2 = i + ksizetb / 2;
+        y1 = i - floor(ksizetb/2);  %-----------------
+        y2 = i + floor(ksizetb/2);  %-----------------
         z1 = j;
-        z2 = j + ksizetb / 2;
+        z2 = j + floor(ksizetb); %-----------------
         
         if false
             if floor(y1) == floor(y2)
@@ -111,12 +112,12 @@ for i = 1 : h % x
         end
         
         % Synthesizing Right Image
-        z1 = j;
-        z2 = j - ksizetb / 2;
+        z2 = j;   %----------------- 
+        z1 = j -(ksizetb);   %----------------- 
 
         if false
             if floor(z1) == floor(z2)
-                z2 = z2 - 1;
+                z1 = z1 - 1;   %----------------- 
             end
         end
         
@@ -188,16 +189,18 @@ integral_image=(integralImage(img_left));
 integral_count=(integralImage(count_left));
 integral_count(integral_count==0) = 1;
 
-integral_count(integral_count==0) = 1;
-img_left=(integral_image(1:end-1,1:end-1,:))./(integral_count(1:end-1,1:end-1,:));
+integral_count = repmat(integral_count,[1,1,c]); %----------------- 
+img_left=integral_image./integral_count; %----------------- 
+img_left=(img_left(2:end,2:end,:)); %----------------- 
 
 % Intigral image - right
 integral_image=(integralImage(img_right));
 integral_count=(integralImage(count_right));
-integral_count(integral_count==0) = -1;
+integral_count(integral_count==0) = 1; %----------------- 
 
-integral_count(integral_count==0) = 1;
-img_right=(integral_image(1:end-1,1:end-1,:))./(integral_count(1:end-1,1:end-1,:));
+integral_count = repmat(integral_count,[1,1,c]); %----------------- 
+img_right=integral_image./integral_count; %----------------- 
+img_right=(img_right(2:end,1:end-1,:)); %----------------- 
 
 %% avoid hole in the image - post process
 % [X,Y] = meshgrid(1:w,1:h);
