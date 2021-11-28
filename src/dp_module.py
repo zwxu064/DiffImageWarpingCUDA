@@ -50,7 +50,8 @@ class DPMergeFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, dcount_left, dcount_right, dimg_left, dimg_right):
         image, depth = ctx.intermediate_results
-        b, h, w, _ = image.shape
+        b, h, w, c = image.shape
+        dimage = image.new_zeros(size=(b, h, w, c)).contiguous()
         ddepth = image.new_zeros(size=(b, h, w)).contiguous()
 
         # assert dcount_left.is_contiguous() and dcount_right.is_contiguous()
@@ -62,9 +63,12 @@ class DPMergeFunction(torch.autograd.Function):
                                  dcount_right,
                                  dimg_left,
                                  dimg_right,
-                                 ddepth)
+                                 ddepth,
+                                 dimage)
 
-        return None, ddepth, None, None
+        dimage = dimage.permute(0, 3, 1, 2)
+
+        return dimage, ddepth, None, None
 
 
 class DPMergeModule(torch.nn.Module):

@@ -121,7 +121,7 @@ def simdp_extrapol(RGB_img, depth):
 
 # ==== Backward ====
 def extrapolation_back(y, z, h, w, src_pixel, is_positive, dimg, dcount, i=None, j=None):
-    dy, dz = y.new_zeros(1), z.new_zeros(1)
+    dy, dz, dpixel_src = y.new_zeros(1), z.new_zeros(1), z.new_zeros(3)
     y = y.view(1)
     z = z.view(1)
 
@@ -132,6 +132,7 @@ def extrapolation_back(y, z, h, w, src_pixel, is_positive, dimg, dcount, i=None,
         for z_int in z_int_loop:
             y_weight = 1 - abs(y_int - y)
             z_weight = 1 - abs(z_int - z)
+            weight = y_weight * z_weight
             y_int_valid = torch.clamp(y_int, 0, h - 1).long()
             z_int_valid = torch.clamp(z_int, 0, w - 1).long()
             dimg_v = dimg[:, y_int_valid, z_int_valid]
@@ -140,7 +141,9 @@ def extrapolation_back(y, z, h, w, src_pixel, is_positive, dimg, dcount, i=None,
 
             if not is_positive:
                 dweight = -dweight
+                weight = -weight
 
+            dpixel_src += dimg_v * weight
             dy_weight = dweight * z_weight
             dz_weight = dweight * y_weight
 
@@ -149,7 +152,7 @@ def extrapolation_back(y, z, h, w, src_pixel, is_positive, dimg, dcount, i=None,
             dz[z_int > z] += dz_weight[z_int > z]
             dz[z_int < z] -= dz_weight[z_int < z]
 
-    return dy, dz
+    return dy, dz, dpixel_src
 
 
 def simdp_extrapol_back(RGB_img, depth, dimg_left, dimg_right, dcount_left, dcount_right):
@@ -157,6 +160,7 @@ def simdp_extrapol_back(RGB_img, depth, dimg_left, dimg_right, dcount_left, dcou
     device = depth.device
     batch, h, w = depth.shape
     ddepth = torch.zeros(depth.shape, dtype=dtype, device=device)
+    dRGB_img = torch.zeros(RGB_img.shape, dtype=dtype, device=device)
     ker_size = depth
 
     for b in range(batch):
@@ -168,32 +172,40 @@ def simdp_extrapol_back(RGB_img, depth, dimg_left, dimg_right, dcount_left, dcou
                 z2 = j + ker_size[b, i, j]
 
                 # Back Left Image
-                dy1, dz1 = extrapolation_back(y1, z1, h, w, RGB_img[b, :, i, j], True, dimg_left[b], dcount_left[b], i, j)
+                dy1, dz1, dpixel_src = extrapolation_back(y1, z1, h, w, RGB_img[b, :, i, j], True, dimg_left[b], dcount_left[b], i, j)
                 ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-                dy2, dz1 = extrapolation_back(y2, z1, h, w, RGB_img[b, :, i, j], False, dimg_left[b], dcount_left[b])
+                dy2, dz1, dpixel_src = extrapolation_back(y2, z1, h, w, RGB_img[b, :, i, j], False, dimg_left[b], dcount_left[b])
                 ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-                dy1, dz2 = extrapolation_back(y1, z2, h, w, RGB_img[b, :, i, j], False, dimg_left[b], dcount_left[b])
+                dy1, dz2, dpixel_src = extrapolation_back(y1, z2, h, w, RGB_img[b, :, i, j], False, dimg_left[b], dcount_left[b])
                 ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1 + dz2
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-                dy2, dz2 = extrapolation_back(y2, z2, h, w, RGB_img[b, :, i, j], True, dimg_left[b], dcount_left[b])
+                dy2, dz2, dpixel_src = extrapolation_back(y2, z2, h, w, RGB_img[b, :, i, j], True, dimg_left[b], dcount_left[b])
                 ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2 + dz2
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
                 # Back Right Image
                 z1 = j - ker_size[b, i, j]
                 z2 = torch.tensor([j], dtype=dtype, device=device)
 
-                dy1, dz1 = extrapolation_back(y1, z1, h, w, RGB_img[b, :, i, j], True, dimg_right[b], dcount_right[b])
+                dy1, dz1, dpixel_src = extrapolation_back(y1, z1, h, w, RGB_img[b, :, i, j], True, dimg_right[b], dcount_right[b])
                 ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1 - dz1
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-                dy2, dz1 = extrapolation_back(y2, z1, h, w, RGB_img[b, :, i, j], False, dimg_right[b], dcount_right[b])
+                dy2, dz1, dpixel_src = extrapolation_back(y2, z1, h, w, RGB_img[b, :, i, j], False, dimg_right[b], dcount_right[b])
                 ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2 - dz1
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-                dy1, dz2 = extrapolation_back(y1, z2, h, w, RGB_img[b, :, i, j], False, dimg_right[b], dcount_right[b])
+                dy1, dz2, dpixel_src = extrapolation_back(y1, z2, h, w, RGB_img[b, :, i, j], False, dimg_right[b], dcount_right[b])
                 ddepth[b, i, j] = ddepth[b, i, j] - 0.5 * dy1
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-                dy2, dz2 = extrapolation_back(y2, z2, h, w, RGB_img[b, :, i, j], True, dimg_right[b], dcount_right[b])
+                dy2, dz2, dpixel_src = extrapolation_back(y2, z2, h, w, RGB_img[b, :, i, j], True, dimg_right[b], dcount_right[b])
                 ddepth[b, i, j] = ddepth[b, i, j] + 0.5 * dy2
+                dRGB_img[b, :, i, j] = dRGB_img[b, :, i, j] + dpixel_src
 
-    return ddepth
+    return ddepth, dRGB_img

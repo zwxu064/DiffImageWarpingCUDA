@@ -245,7 +245,8 @@ __device__ void AssignRGB2NeighbourBack(const int height,
                                         const float* image,
                                         const float* dimage_count,
                                         const float* dimage_stack,
-                                        float* ddepth) {
+                                        float* ddepth,
+                                        float* dimage) {
     int rgb_offset = b * height * width * channel + i * width * channel + j * channel;
     int ddepth_dst = b * height * width + i * width + j;
     int y_floor = floor(y);
@@ -254,6 +255,9 @@ __device__ void AssignRGB2NeighbourBack(const int height,
     int z_ceil = ceil(z);
     float dy = 0;
     float dz = 0;
+    float dpixel_src_r = 0;
+    float dpixel_src_g = 0;
+    float dpixel_src_b = 0;
 
     for (int idx_y = 0; idx_y <= 1; idx_y++) {
         int y_int = y_floor;
@@ -282,9 +286,18 @@ __device__ void AssignRGB2NeighbourBack(const int height,
             int dcount_index = b * height * width + y_int_valid * width + z_int_valid;
             int drgb_offset = b * height * width * channel + y_int_valid * width * channel + z_int_valid * channel;
             float dweight = dimage_count[dcount_index];
+            float weight = y_weight * z_weight;
+            if (!is_positive) weight = -weight;
 
             for (int k = 0; k < channel; k++)
                 dweight += image[rgb_offset + k] * dimage_stack[drgb_offset + k];
+
+            dpixel_src_r += weight * dimage_stack[drgb_offset];
+
+            if (channel == 3) {
+                dpixel_src_g += weight * dimage_stack[drgb_offset + 1];
+                dpixel_src_b += weight * dimage_stack[drgb_offset + 2];
+            }
 
             if (!is_positive) dweight = -dweight;
             float dy_weight = dweight * z_weight;
@@ -303,6 +316,13 @@ __device__ void AssignRGB2NeighbourBack(const int height,
     }
 
     atomicAdd(&ddepth[ddepth_dst], dy_sign * dy + dz_sign * dz);
+    atomicAdd(&dimage[rgb_offset], dpixel_src_r);
+
+    if (channel == 3) {
+        atomicAdd(&dimage[rgb_offset + 1], dpixel_src_g);
+        atomicAdd(&dimage[rgb_offset + 2], dpixel_src_b);
+    }
+
     __syncthreads();
 }
 
@@ -316,7 +336,8 @@ __global__ void DepthMergeBackKernel(const int batch,
                                      const float* dright_count,
                                      const float* dleft_image_stack,
                                      const float* dright_image_stack,
-                                     float* ddepth) {
+                                     float* ddepth,
+                                     float* dimage) {
     int tid = blockIdx.x * blockDim.x + threadIdx.x;
     if (tid >= batch * height * width) return;
 
@@ -334,13 +355,13 @@ __global__ void DepthMergeBackKernel(const int batch,
     // Sync left image back
     if (dleft_image_stack != nullptr) {
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_1, -0.5, 0,
-                                true, image, dleft_count, dleft_image_stack, ddepth);
+                                true, image, dleft_count, dleft_image_stack, ddepth, dimage);
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_1, 0.5, 0,
-                                false, image, dleft_count, dleft_image_stack, ddepth);
+                                false, image, dleft_count, dleft_image_stack, ddepth, dimage);
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_2, -0.5, 1,
-                                false, image, dleft_count, dleft_image_stack, ddepth);
+                                false, image, dleft_count, dleft_image_stack, ddepth, dimage);
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_2, 0.5, 1,
-                                true, image, dleft_count, dleft_image_stack, ddepth);
+                                true, image, dleft_count, dleft_image_stack, ddepth, dimage);
     }
 
     // Sync right image back
@@ -349,13 +370,13 @@ __global__ void DepthMergeBackKernel(const int batch,
         z_2 = j;
 
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_1, -0.5, -1,
-                                true, image, dright_count, dright_image_stack, ddepth);
+                                true, image, dright_count, dright_image_stack, ddepth, dimage);
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_1, 0.5, -1,
-                                false, image, dright_count, dright_image_stack, ddepth);
+                                false, image, dright_count, dright_image_stack, ddepth, dimage);
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_2, -0.5, 0,
-                                false, image, dright_count, dright_image_stack, ddepth);
+                                false, image, dright_count, dright_image_stack, ddepth, dimage);
         AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_2, 0.5, 0,
-                                true, image, dright_count, dright_image_stack, ddepth);
+                                true, image, dright_count, dright_image_stack, ddepth, dimage);
     }
 }
 
@@ -365,7 +386,8 @@ void DepthMergeBackCUDA(const at::Tensor image,
                         const at::Tensor dright_count,
                         const at::Tensor dleft_image_stack,
                         const at::Tensor dright_image_stack,
-                        at::Tensor ddepth) {
+                        at::Tensor ddepth,
+                        at::Tensor dimage) {
     const int batch = image.size(0);
     const int height = image.size(1);
     const int width = image.size(2);
@@ -373,6 +395,7 @@ void DepthMergeBackCUDA(const at::Tensor image,
     const float* image_ptr = image.data<float>();
     const float* depth_ptr = depth.data<float>();
     float* ddepth_ptr = ddepth.data<float>();
+    float* dimage_ptr = dimage.data<float>();
     float* dleft_count_ptr = nullptr;
     float* dright_count_ptr = nullptr;
     float* dleft_image_stack_ptr = nullptr;
@@ -402,7 +425,8 @@ void DepthMergeBackCUDA(const at::Tensor image,
                                                               dright_count_ptr,
                                                               dleft_image_stack_ptr,
                                                               dright_image_stack_ptr,
-                                                              ddepth_ptr);
+                                                              ddepth_ptr,
+                                                              dimage_ptr);
 }
 
 #ifdef __cplusplus

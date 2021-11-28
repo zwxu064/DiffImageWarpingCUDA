@@ -113,7 +113,7 @@ def simdp(RGB_img, depth, image_left=None, image_right=None):
 if __name__ == '__main__':
     torch.manual_seed(0)
 
-    enable_load_matlab = True  # enable for real data; otherwise, random data
+    enable_load_matlab = False  # enable for real data; otherwise, random data
     enable_cuda = True
     enable_gradient = True
     enable_pytorch_manual = True  # forward, this will be slow
@@ -149,7 +149,7 @@ if __name__ == '__main__':
               count_right_gt.abs().sum().numpy())
     else:
         b, c, h, w, num_disps = 8, 3, 32, 64, 32
-        RGB_img = torch.rand(size=(b, c, h, w), dtype=torch.float32)
+        RGB_img = torch.rand(size=(b, c, h, w), dtype=torch.float32, requires_grad=enable_gradient)
         depth = torch.rand(size=(b, h, w), dtype=torch.float32, requires_grad=enable_gradient) * num_disps
 
     img_left, img_right, count_left, count_right = None, None, None, None
@@ -248,6 +248,7 @@ if __name__ == '__main__':
             loss += (count_right_clone * torch.rand(count_right_clone.shape)).sum()
             loss = 1000 * loss
 
+        RGB_img.retain_grad()
         depth.retain_grad()
         img_left.retain_grad()
         img_right.retain_grad()
@@ -265,6 +266,7 @@ if __name__ == '__main__':
               duration))
 
         if enable_gradient:
+            dRGB_img = RGB_img.grad if (RGB_img.grad is not None) else None
             dimg_left = img_left.grad if (img_left.grad is not None) else torch.zeros_like(img_left)
             dimg_right = img_right.grad if (img_right.grad is not None) else torch.zeros_like(img_right)
             dcount_left = count_left.grad if (count_left.grad is not None) else torch.zeros_like(count_left)
@@ -273,17 +275,18 @@ if __name__ == '__main__':
         # Check manual back
         if enable_pytorch_manual_back:
             time_start = time.time()
-            ddepth_manual = simdp_extrapol_back(RGB_img,
-                                                depth,
-                                                dimg_left,
-                                                dimg_right,
-                                                dcount_left,
-                                                dcount_right)
+            ddepth_manual, dRGB_img_manual = simdp_extrapol_back(RGB_img,
+                                                                 depth,
+                                                                 dimg_left,
+                                                                 dimg_right,
+                                                                 dcount_left,
+                                                                 dcount_right)
             duration = time.time() - time_start
 
-            print('Check manual backward: diff: {:.8f}; '
+            print('Check manual backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
                   'min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
                   (depth.grad - ddepth_manual).abs().max().detach().numpy(),
+                  (dRGB_img - dRGB_img_manual).abs().max().detach().numpy(),
                   ddepth_manual.min().detach().numpy(),
                   ddepth_manual.max().detach().numpy(),
                   duration))
@@ -301,6 +304,7 @@ if __name__ == '__main__':
 
             duration = 0
             for idx in range(1000):
+                dimage_cu = torch.zeros(b, h, w, c, dtype=torch.float32, device='cuda').contiguous()
                 ddepth_cu = torch.zeros(b, h, w, dtype=torch.float32, device='cuda').contiguous()
                 torch.cuda.synchronize()
                 time_start = time.time()
@@ -310,16 +314,20 @@ if __name__ == '__main__':
                                          dcount_right_cu,
                                          dimg_left_cu,
                                          dimg_right_cu,
-                                         ddepth_cu)
+                                         ddepth_cu,
+                                         dimage_cu)
+                dimage_cu = dimage_cu.permute(0, 3, 1, 2)
                 torch.cuda.synchronize()
                 duration += time.time() - time_start
             duration /= 1000
 
             ddepth_cu = ddepth_cu.contiguous()
+            dimage_cu = dimage_cu.contiguous()
 
-            print('Check CUDA backward: diff: {:.8f}; '
+            print('Check CUDA backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
                   'min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
                   (depth.grad - ddepth_cu.cpu()).abs().max().numpy(),
+                  (dRGB_img - dimage_cu.cpu()).abs().max().numpy(),
                   ddepth_cu.cpu().min().numpy(),
                   ddepth_cu.cpu().max().numpy(),
                   duration))

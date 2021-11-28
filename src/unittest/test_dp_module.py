@@ -50,7 +50,7 @@ else:
     # to check if the depth gradient on CUDA is correct and 1000-time statistics,
     # go to ../python and run simulator_dp.py
     b, c, h, w, num_disps = 2, 3, 32, 64, 32
-    RGB_img = torch.rand(size=(b, c, h, w), dtype=torch.float32).cuda()
+    RGB_img = torch.rand(size=(b, c, h, w), dtype=torch.float32, requires_grad=True).cuda()
     depth = torch.rand(size=(b, h, w), dtype=torch.float32, requires_grad=True).cuda() * num_disps
 
     DP_obj = DPMerge(enable_left=True, enable_right=True)
@@ -59,8 +59,13 @@ else:
     loss = (img_left_avg_cu * torch.rand(img_left_avg_cu.shape, device=img_left_avg_cu.device)).sum()
     loss += (img_right_avg_cu * torch.rand(img_right_avg_cu.shape, device=img_right_avg_cu.device)).sum()
 
+    RGB_img.retain_grad()
     depth.retain_grad()
     loss.backward()
+    dimage = RGB_img.grad
     ddepth = depth.grad
+
+    print('RGB gradient shape: {}, min: {:.4f}, max: {:.4f}' \
+          .format(dimage.shape, dimage.min(), dimage.max()))
     print('Depth gradient shape: {}, min: {:.4f}, max: {:.4f}' \
         .format(ddepth.shape, ddepth.min(), ddepth.max()))

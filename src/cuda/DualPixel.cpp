@@ -32,14 +32,16 @@ void DepthMergeBack(const at::Tensor image,
                     const at::Tensor dright_count,
                     const at::Tensor dleft_image_stack,
                     const at::Tensor dright_image_stack,
-                    at::Tensor ddepth) {
+                    at::Tensor ddepth,
+                    at::Tensor dimage) {
     DepthMergeBackCUDA(image,
                        depth,
                        dleft_count,
                        dright_count,
                        dleft_image_stack,
                        dright_image_stack,
-                       ddepth);
+                       ddepth,
+                       dimage);
 }
 
 #ifdef __cplusplus
