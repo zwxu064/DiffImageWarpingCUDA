@@ -77,16 +77,26 @@ class DPMergeModule(torch.nn.Module):
         self.enable_left = enable_left
         self.enable_right = enable_right
 
-    def forward(self, image, depth):
+    def forward(self, image, depth, enable_debug=False):
         count_left, count_right, img_left, img_right = \
-            DPMergeFunction.apply(image,
-                                  depth,
-                                  self.enable_left,
-                                  self.enable_right)
+            DPMergeFunction.apply(image, depth, self.enable_left, self.enable_right)
 
-        count_left[count_left == 0] = 1
-        count_right[count_right == 0] = 1
-        img_left_avg = img_left / count_left.unsqueeze(1)
-        img_right_avg = img_right / count_right.unsqueeze(1)
+        # Accumulated images
+        count_left_final = count_left.cumsum(dim=1).cumsum(dim=2)
+        count_right_final = count_right.cumsum(dim=1).cumsum(dim=2)
+        count_left_final[count_left_final <= 1.0] = 1.0
+        count_right_final[count_right_final <= 1.0] = 1.0
 
-        return img_left_avg, img_right_avg
+        img_left_avg = img_left.cumsum(dim=2).cumsum(dim=3) / count_left_final.unsqueeze(1)
+        img_right_avg = img_right.cumsum(dim=2).cumsum(dim=3) / count_right_final.unsqueeze(1)
+
+        img_left_avg[img_left_avg < 0.0] = 0.0
+        img_left_avg[img_left_avg > 1.0] = 1.0
+
+        img_right_avg[img_right_avg < 0.0] = 0.0
+        img_right_avg[img_right_avg > 1.0] = 1.0
+
+        if enable_debug:
+            return img_left_avg, img_right_avg, img_left, img_right, count_left, count_right
+        else:
+            return img_left_avg, img_right_avg
