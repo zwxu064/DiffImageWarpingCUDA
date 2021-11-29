@@ -4,7 +4,7 @@
 
 %% load data
 data_dir = '../../data/multiple';
-max_index = 50;
+max_index = 1;
 save_dir = fullfile(data_dir, 'matlab');
 
 if ~exist(save_dir, 'dir')
@@ -20,12 +20,12 @@ function processing_single(data_dir, index)
   %% camera para
   para = 35;
   % m -> mm
-  f=para/1e3;
+  f = para/1e3;
   % focal length in number of pixels raise raise
-  f_rgb=3000;
-  pixelsize=f/f_rgb;
+  f_rgb = 3000;
+  pixelsize = f/f_rgb;
   % aperture size in grid of pixels
-  aperture_size=floor(f_rgb/5);
+  aperture_size = floor(f_rgb/5);
   Fd = 7;
   % sacle for depth range
   scaled = 1.0;
@@ -46,44 +46,43 @@ function processing_single(data_dir, index)
   RGB_img = im2double(img_name);
 
   if isfield(depth_name, 'disp')
-    depth_in = depth_name.disp/scaled;
+    disp = depth_name.disp;
+    k_size = disp;
   else
-    depth_in = depth_name.depths/scaled;
+    depth_in = depth_name.depths / scaled;
+
+    % depth in number of pixels
+    depth_pixel = depth_in / pixelsize;
+
+    % d'
+    d = (f_rgb * depth_pixel) ./ (depth_pixel - f_rgb);
+    % focal distance
+    F = min(d(:)) - Fd;
+    % disparity
+    disp = ((d - F) ./ d) .* aperture_size / 2;
+    k_size = floor((1 - (F ./ d)) * aperture_size);
   end
 
-  % depth in number of pixels
-  depth_pixel = depth_in/(pixelsize);
-
-  % d'
-  d = (f_rgb*depth_pixel)./(depth_pixel-f_rgb);
-  % focal distance
-  F = min(d(:))-Fd;
-  % disparity
-  disp = ((d-F)./d).*aperture_size/2;
-
   %%
-  %%
-  [h,w,c]=size(img_name);  %-----------------
+  [h, w, c] = size(img_name);  %-----------------
 
   img_left = zeros(size(RGB_img));
-  count_left = zeros(size(d));
+  count_left = zeros(size(disp));
 
   img_right = zeros(size(RGB_img));
-  count_right = zeros(size(d));
-
-  k_size = floor((1-(F./d)) * aperture_size);
+  count_right = zeros(size(disp));
 
   tic;
   RGB_img = single(RGB_img);
   k_size = single(k_size);
-  img_left =single(img_left);
+  img_left = single(img_left);
   img_right = single(img_right);
   count_left = single(count_left);
   count_right = single(count_right);
 
   for i = 1 : h % x
       for j = 1 : w %y
-          ksizetb = k_size(i,j);
+          ksizetb = k_size(i, j);
 
           % Move round inside extrapolation
           y1 = i - ksizetb / 2;  %-----------------
@@ -209,22 +208,22 @@ function processing_single(data_dir, index)
 
   %%
   % Intigral image - left
-  integral_image=(integralImage(img_left));
-  integral_count=(integralImage(count_left));
-  integral_count(integral_count==0) = 1;
+  integral_image = (integralImage(img_left));
+  integral_count = (integralImage(count_left));
+  integral_count(integral_count == 0) = 1;
 
-  integral_count = repmat(integral_count,[1,1,c]); %----------------- 
-  img_left_final=integral_image./integral_count; %----------------- 
-  img_left_final=(img_left_final(2:end,2:end,:)); %----------------- 
+  integral_count = repmat(integral_count, [1, 1, c]); %----------------- 
+  img_left_final = integral_image ./ integral_count; %----------------- 
+  img_left_final = (img_left_final(2:end, 2:end, :)); %----------------- 
 
   % Intigral image - right
-  integral_image=(integralImage(img_right));
-  integral_count=(integralImage(count_right));
-  integral_count(integral_count==0) = 1; %----------------- 
+  integral_image = (integralImage(img_right));
+  integral_count = (integralImage(count_right));
+  integral_count(integral_count == 0) = 1; %----------------- 
 
   integral_count = repmat(integral_count,[1,1,c]); %----------------- 
-  img_right_final=integral_image./integral_count; %----------------- 
-  img_right_final=(img_right_final(2:end,1:end-1,:)); %----------------- 
+  img_right_final = integral_image ./ integral_count; %----------------- 
+  img_right_final = (img_right_final(2:end, 2:end, :)); %----------------- 
 
   %% avoid hole in the image - post process
   % [X,Y] = meshgrid(1:w,1:h);
@@ -242,15 +241,18 @@ function processing_single(data_dir, index)
   % img_left(idxl) = midiml(idxl);
   % img_right(idxr) = midimr(idxr);
 
-
-  img_left_final = imresize(img_left_final(crop:end-crop,crop:end-crop,:), [480,640]);
-  img_right_final = imresize(img_right_final(crop:end-crop,crop:end-crop,:), [480,640]);
-  RGB_img_final = imresize(RGB_img(crop:end-crop,crop:end-crop,:), [480,640]);
+  if false
+    img_left_final = imresize(img_left_final(crop:end-crop,crop:end-crop,:), [480,640]);
+    img_right_final = imresize(img_right_final(crop:end-crop,crop:end-crop,:), [480,640]);
+    RGB_img_final = imresize(RGB_img(crop:end-crop,crop:end-crop,:), [480,640]);
+  else
+    RGB_img_final = RGB_img;
+  end
 
   idx = k_size<=2;
   idx = repmat(idx,[1,1,3]);
-  img_left_final(idx)=RGB_img_final(idx);
-  img_right_final(idx)=RGB_img_final(idx);
+  img_left_final(idx) = RGB_img_final(idx);
+  img_right_final(idx) = RGB_img_final(idx);
 
   imwrite(img_left_final, fullfile(data_dir, sprintf('matlab/oult_l_%02d.png', index)));
   imwrite(img_right_final, fullfile(data_dir, sprintf('matlab/oult_r_%02d.png', index)));

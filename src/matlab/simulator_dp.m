@@ -18,32 +18,38 @@ scaled = 1.0;
 crop = 20; 
 
 %% load data
-img_name = imread('../../data/input.png');
-RGB_img = im2double(img_name);
+if false
+  img_name = imread('../../data/input.png');
+  RGB_img = im2double(img_name);
+  depth_name = load('../../data/depths.mat');
+  depth_in = depth_name.depths/scaled;
 
-depth_name = load('../../data/depths.mat');
-depth_in = depth_name.depths/scaled;
+  % depth in number of pixels
+  depth_pixel = depth_in/(pixelsize);
 
-% depth in number of pixels
-depth_pixel = depth_in/(pixelsize);
-
-% d'
-d = (f_rgb*depth_pixel)./(depth_pixel-f_rgb); 
-% focal distance
-F = min(d(:))-Fd; 
-% disparity
-disp = ((d-F)./d).*aperture_size/2; 
+  % d'
+  d = (f_rgb*depth_pixel)./(depth_pixel-f_rgb); 
+  % focal distance
+  F = min(d(:))-Fd; 
+  % disparity
+  disp = ((d-F)./d).*aperture_size/2; 
+  k_size = floor( (1-(F./d) ) * aperture_size );
+else
+  img_name = imread('../../data/multiple/input_01.png');
+  RGB_img = im2double(img_name);
+  depth_name = load('../../data/multiple/depth_01.mat');
+  disp = depth_name.disp;
+  k_size = disp;
+end
 
 %%
 [h,w,c]=size(img_name);  %-----------------
 
 img_left = zeros(size(RGB_img));
-count_left = zeros(size(d));
+count_left = zeros(size(disp));
 
 img_right = zeros(size(RGB_img));
-count_right = zeros(size(d));
-
-k_size = floor( (1-(F./d) ) * aperture_size );
+count_right = zeros(size(disp));
 
 tic;
 for i = 1:h % x
@@ -82,7 +88,7 @@ for i = 1:h % x
         
         % Synthesizing Right Image
         z2 = j; %----------------- 
-        z1 = j -(ksizetb); %----------------- 
+        z1 = j - floor(ksizetb); %----------------- 
 
         if z1==z2 
             z1=z1-1; %----------------- 
@@ -161,15 +167,18 @@ img_right=(img_right(2:end,1:end-1,:));%-----------------
 % img_right(idxr) = midimr(idxr);
 
 
-img_left = imresize(img_left(crop:end-crop,crop:end-crop,:), [480,640]);
-img_right = imresize(img_right(crop:end-crop,crop:end-crop,:), [480,640]);
-RGB_img = imresize(RGB_img(crop:end-crop,crop:end-crop,:), [480,640]);
+% img_left = imresize(img_left(crop:end-crop,crop:end-crop,:), [480,640]);
+% img_right = imresize(img_right(crop:end-crop,crop:end-crop,:), [480,640]);
+% RGB_img = imresize(RGB_img(crop:end-crop,crop:end-crop,:), [480,640]);
 
 idx = k_size<=2;
 idx = repmat(idx,[1,1,3]);
 img_left(idx)=RGB_img(idx);
 img_right(idx)=RGB_img(idx);
 
-imwrite(img_left, '../../results/oult_l.png');
-imwrite(img_right, '../../results/oult_r.png');
-imwrite(RGB_img, '../../results/oult_gt.png');
+% imwrite(img_left, '../../results/oult_l.png');
+% imwrite(img_right, '../../results/oult_r.png');
+% imwrite(RGB_img, '../../results/oult_gt.png');
+imwrite(img_left, 'oult_l.png');
+imwrite(img_right, 'oult_r.png');
+imwrite(RGB_img, 'oult_gt.png');
