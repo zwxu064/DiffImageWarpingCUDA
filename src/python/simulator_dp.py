@@ -117,7 +117,7 @@ if __name__ == '__main__':
     enable_cuda = True
     enable_gradient = True
     enable_pytorch_manual = True  # forward, this will be slow
-    enable_pytorch_manual_back = True  # backward, this will be super slow
+    enable_pytorch_manual_back = False  # backward, this will be super slow
     enable_cuda_implement = True
 
     enable_gradient = False if (not enable_pytorch_manual) else enable_gradient
@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
     # ==== Check forward propagation
     if enable_load_matlab:
-        obj = scio.loadmat('../../data/matlab.mat')
+        obj = scio.loadmat('../../data/single/matlab/matlab_01.mat')
         RGB_img = torch.from_numpy(obj['RGB_img']).float().permute(2, 0, 1).unsqueeze(0)
         depth = torch.from_numpy(obj['k_size']).float().unsqueeze(0)
         img_left_gt = torch.from_numpy(obj['img_left']).float().permute(2, 0, 1).unsqueeze(0)
@@ -284,7 +284,7 @@ if __name__ == '__main__':
             duration = time.time() - time_start
 
             print('Check manual backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
-                  'min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
+                  'depth grad min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
                   (depth.grad - ddepth_manual).abs().max().detach().numpy(),
                   (dRGB_img - dRGB_img_manual).abs().max().detach().numpy(),
                   ddepth_manual.min().detach().numpy(),
@@ -325,7 +325,7 @@ if __name__ == '__main__':
             dimage_cu = dimage_cu.contiguous()
 
             print('Check CUDA backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
-                  'min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
+                  'depth grad min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
                   (depth.grad - ddepth_cu.cpu()).abs().max().numpy(),
                   (dRGB_img - dimage_cu.cpu()).abs().max().numpy(),
                   ddepth_cu.cpu().min().numpy(),

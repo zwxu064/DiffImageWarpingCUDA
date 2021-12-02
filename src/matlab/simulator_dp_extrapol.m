@@ -3,7 +3,7 @@
 %
 
 %% load data
-data_dir = '../../data/multiple';
+data_dir = '../../data/single';
 max_index = 1;
 save_dir = fullfile(data_dir, 'matlab');
 
@@ -85,8 +85,8 @@ function processing_single(data_dir, index)
           ksizetb = k_size(i, j);
 
           % Move round inside extrapolation
-          y1 = i - ksizetb / 2;  %-----------------
-          y2 = i + ksizetb / 2;  %-----------------
+          y1 = i; %-----------------
+          y2 = i + ksizetb; %-----------------
           z1 = j;
           z2 = j + ksizetb; %-----------------
 
@@ -254,9 +254,9 @@ function processing_single(data_dir, index)
   img_left_final(idx) = RGB_img_final(idx);
   img_right_final(idx) = RGB_img_final(idx);
 
-  imwrite(img_left_final, fullfile(data_dir, sprintf('matlab/oult_l_%02d.png', index)));
-  imwrite(img_right_final, fullfile(data_dir, sprintf('matlab/oult_r_%02d.png', index)));
-  imwrite(RGB_img_final, fullfile(data_dir, sprintf('matlab/oult_gt_%02d.png', index)));
+  imwrite(img_left_final, fullfile(data_dir, sprintf('matlab/left_syn_matlab_%02d.png', index)));
+  imwrite(img_right_final, fullfile(data_dir, sprintf('matlab/right_syn_matlab_%02d.png', index)));
+  imwrite(RGB_img_final, fullfile(data_dir, sprintf('matlab/gt_matlab_%02d.png', index)));
 
   save(save_path, 'img_left', 'img_right', ...
     'count_left', 'count_right', 'RGB_img', 'k_size', ...

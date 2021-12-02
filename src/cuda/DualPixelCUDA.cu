@@ -104,8 +104,8 @@ __global__ void DepthMergeKernel(const int batch,
     int tid_mod = tid % image_size;
     int i = tid_mod / width;
     int j = tid_mod % width;
-    float y_1 = i - (current_depth / 2);
-    float y_2 = i + (current_depth / 2);
+    float y_1 = i;
+    float y_2 = i + current_depth;
     float z_1 = j;
     float z_2 = j + current_depth;
 
@@ -347,20 +347,20 @@ __global__ void DepthMergeBackKernel(const int batch,
     int tid_mod = tid % image_size;
     int i = tid_mod / width;
     int j = tid_mod % width;
-    float y_1 = i - (current_depth / 2);
-    float y_2 = i + (current_depth / 2);
+    float y_1 = i;
+    float y_2 = i + current_depth;
     float z_1 = j;
     float z_2 = j + current_depth;
 
     // Sync left image back
     if (dleft_image_stack != nullptr) {
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_1, -0.5, 0,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_1, 0, 0,
                                 true, image, dleft_count, dleft_image_stack, ddepth, dimage);
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_1, 0.5, 0,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_1, 1, 0,
                                 false, image, dleft_count, dleft_image_stack, ddepth, dimage);
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_2, -0.5, 1,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_2, 0, 1,
                                 false, image, dleft_count, dleft_image_stack, ddepth, dimage);
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_2, 0.5, 1,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_2, 1, 1,
                                 true, image, dleft_count, dleft_image_stack, ddepth, dimage);
     }
 
@@ -369,13 +369,13 @@ __global__ void DepthMergeBackKernel(const int batch,
         z_1 = j - current_depth;
         z_2 = j;
 
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_1, -0.5, -1,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_1, 0, -1,
                                 true, image, dright_count, dright_image_stack, ddepth, dimage);
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_1, 0.5, -1,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_1, 1, -1,
                                 false, image, dright_count, dright_image_stack, ddepth, dimage);
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_2, -0.5, 0,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_1, z_2, 0, 0,
                                 false, image, dright_count, dright_image_stack, ddepth, dimage);
-        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_2, 0.5, 0,
+        AssignRGB2NeighbourBack(height, width, channel, b, i, j, y_2, z_2, 1, 0,
                                 true, image, dright_count, dright_image_stack, ddepth, dimage);
     }
 }

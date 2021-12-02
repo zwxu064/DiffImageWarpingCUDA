@@ -56,8 +56,8 @@ for i = 1:h % x
     for j = 1 :w %y
         ksizetb = k_size(i,j);
 
-        y1 = i - floor(ksizetb/2);  %-----------------
-        y2 = i + floor(ksizetb/2);  %-----------------
+        y1 = i; %-----------------
+        y2 = i + floor(ksizetb); %-----------------
         z1 = j;
         z2 = j +floor(ksizetb); %-----------------
         
