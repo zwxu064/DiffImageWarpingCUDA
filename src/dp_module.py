@@ -3,7 +3,7 @@
 #
 
 import torch, sys
-import torch.nn as nn
+
 sys.path.append('..')
 
 from cuda.lib_dualpixel import DualPixel
@@ -11,7 +11,13 @@ from cuda.lib_dualpixel import DualPixel
 
 class DPMergeFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, image, depth, enable_left=False, enable_right=False):
+    def forward(
+        ctx,
+        image,
+        depth,
+        enable_left=False,
+        enable_right=False
+    ):
         b, c, h, w = image.shape
 
         image = image.permute(0, 2, 3, 1).contiguous()
@@ -34,12 +40,14 @@ class DPMergeFunction(torch.autograd.Function):
         # assert count_left.is_contiguous() and count_right.is_contiguous()
         # assert img_left.is_contiguous() and img_right.is_contiguous()
 
-        DualPixel.DepthMerge(image,
-                             depth,
-                             count_left,
-                             count_right,
-                             img_left,
-                             img_right)
+        DualPixel.DepthMerge(
+            image,
+            depth,
+            count_left,
+            count_right,
+            img_left,
+            img_right
+        )
 
         ctx.intermediate_results = image, depth
         img_left = img_left.permute(0, 3, 1, 2)
@@ -48,7 +56,13 @@ class DPMergeFunction(torch.autograd.Function):
         return count_left, count_right, img_left, img_right
 
     @staticmethod
-    def backward(ctx, dcount_left, dcount_right, dimg_left, dimg_right):
+    def backward(
+        ctx,
+        dcount_left,
+        dcount_right,
+        dimg_left,
+        dimg_right
+    ):
         image, depth = ctx.intermediate_results
         b, h, w, c = image.shape
         dimage = image.new_zeros(size=(b, h, w, c)).contiguous()
@@ -57,14 +71,16 @@ class DPMergeFunction(torch.autograd.Function):
         # assert dcount_left.is_contiguous() and dcount_right.is_contiguous()
         # assert dimg_left.is_contiguous() and dimg_right.is_contiguous()
 
-        DualPixel.DepthMergeBack(image,
-                                 depth,
-                                 dcount_left,
-                                 dcount_right,
-                                 dimg_left,
-                                 dimg_right,
-                                 ddepth,
-                                 dimage)
+        DualPixel.DepthMergeBack(
+            image,
+            depth,
+            dcount_left,
+            dcount_right,
+            dimg_left,
+            dimg_right,
+            ddepth,
+            dimage
+        )
 
         dimage = dimage.permute(0, 3, 1, 2)
 
@@ -72,14 +88,27 @@ class DPMergeFunction(torch.autograd.Function):
 
 
 class DPMergeModule(torch.nn.Module):
-    def __init__(self, enable_left=False, enable_right=False):
+    def __init__(
+        self,
+        enable_left=False,
+        enable_right=False
+    ):
         super(DPMergeModule, self).__init__()
         self.enable_left = enable_left
         self.enable_right = enable_right
 
-    def forward(self, image, depth, enable_debug=False):
-        count_left, count_right, img_left, img_right = \
-            DPMergeFunction.apply(image, depth, self.enable_left, self.enable_right)
+    def forward(
+        self,
+        image,
+        depth,
+        enable_debug=False
+    ):
+        count_left, count_right, img_left, img_right = DPMergeFunction.apply(
+            image,
+            depth,
+            self.enable_left,
+            self.enable_right
+        )
 
         # Accumulated images
         count_left_final = count_left.cumsum(dim=1).cumsum(dim=2)
@@ -90,11 +119,8 @@ class DPMergeModule(torch.nn.Module):
         img_left_avg = img_left.cumsum(dim=2).cumsum(dim=3) / count_left_final.unsqueeze(1)
         img_right_avg = img_right.cumsum(dim=2).cumsum(dim=3) / count_right_final.unsqueeze(1)
 
-        img_left_avg[img_left_avg < 0.0] = 0.0
-        img_left_avg[img_left_avg > 1.0] = 1.0
-
-        img_right_avg[img_right_avg < 0.0] = 0.0
-        img_right_avg[img_right_avg > 1.0] = 1.0
+        img_left_avg = img_left_avg.clamp(min=0., max=1.)
+        img_right_avg = img_right_avg.clamp(min=0., max=1.)
 
         if enable_debug:
             return img_left_avg, img_right_avg, img_left, img_right, count_left, count_right

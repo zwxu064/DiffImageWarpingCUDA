@@ -6,7 +6,13 @@ import torch
 
 
 # ==== Forward ====
-def extrapolation(y, z, h, w, src_pixel):
+def extrapolation(
+    y,
+    z,
+    h,
+    w,
+    src_pixel
+):
     img_list, count_list, y_int_list, z_int_list = [], [], [], []
     y = y.view(1)
     z = z.view(1)
@@ -44,7 +50,10 @@ def extrapolation(y, z, h, w, src_pixel):
     return img_list, count_list, y_int_list, z_int_list
 
 
-def simdp_extrapol(RGB_img, depth):
+def simdp_extrapol(
+    RGB_img,
+    depth
+):
     ker_size = depth
     batch, c, h, w = RGB_img.shape
     device = RGB_img.device
@@ -120,7 +129,17 @@ def simdp_extrapol(RGB_img, depth):
 
 
 # ==== Backward ====
-def extrapolation_back(y, z, h, w, src_pixel, is_positive, dimg, dcount, i=None, j=None):
+def extrapolation_back(
+    y,
+    z,
+    h,
+    w,
+    src_pixel,
+    is_positive,
+    dimg, dcount,
+    i=None,
+    j=None
+):
     dy, dz, dpixel_src = y.new_zeros(1), z.new_zeros(1), z.new_zeros(3)
     y = y.view(1)
     z = z.view(1)
@@ -155,7 +174,14 @@ def extrapolation_back(y, z, h, w, src_pixel, is_positive, dimg, dcount, i=None,
     return dy, dz, dpixel_src
 
 
-def simdp_extrapol_back(RGB_img, depth, dimg_left, dimg_right, dcount_left, dcount_right):
+def simdp_extrapol_back(
+    RGB_img,
+    depth,
+    dimg_left,
+    dimg_right,
+    dcount_left,
+    dcount_right
+):
     dtype = depth.dtype
     device = depth.device
     batch, h, w = depth.shape

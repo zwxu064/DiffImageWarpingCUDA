@@ -3,6 +3,7 @@
 #
 
 import torch, time
+
 from CUDA.lib_dualpixel import DualPixel
 from scipy import io as scio
 
@@ -21,9 +22,11 @@ if __name__ == '__main__':
     # Data setup
     if not enable_dump_matlab:
         batch, channel, h, w = 1, 3, 1, 3
-        image = torch.tensor([[1, 4, 7, 2, 5, 8, 3, 6, 9]],
-                             dtype=torch.float32,
-                             device=device).view(batch, channel, h, w)
+        image = torch.tensor(
+            [[1, 4, 7, 2, 5, 8, 3, 6, 9]],
+            dtype=torch.float32,
+            device=device
+        ).view(batch, channel, h, w)
         depth = torch.tensor([[2, 2, 2]], dtype=torch.float32, device=device).view(batch, h, w)
 
         left_img_count = torch.zeros(batch, h, w, dtype=torch.int32, device=device)
@@ -35,7 +38,14 @@ if __name__ == '__main__':
         left_img_stack = left_img_stack.permute(0, 2, 3, 1)
         right_img_stack = right_img_stack.permute(0, 2, 3, 1)
 
-        DualPixel.DepthMerge(image, depth, left_img_count, right_img_count, left_img_stack, right_img_stack)
+        DualPixel.DepthMerge(
+            image,
+            depth,
+            left_img_count,
+            right_img_count,
+            left_img_stack,
+            right_img_stack
+        )
     else:
         # Load from MatLab dumped data, which was generated in "simulator_dp.m"
         data = scio.loadmat('../data/matlab_dump.mat')
@@ -66,17 +76,25 @@ if __name__ == '__main__':
             torch.cuda.synchronize()
             time_start = time.time()
 
-            DualPixel.DepthMerge(image, depth, left_img_count, right_img_count, left_img_stack, right_img_stack)
+            DualPixel.DepthMerge(
+                image,
+                depth,
+                left_img_count,
+                right_img_count,
+                left_img_stack,
+                right_img_stack
+            )
 
             torch.cuda.synchronize()
             duration = time.time() - time_start
             time_sum += duration if (loop_idx > 0) else time_sum
 
-        print('Average CUDA time: {:.4f}ms.'.format(time_sum * 1.0e3 / (loops - 1)))
+        print(f'Average CUDA time: {time_sum * 1.0e3 / (loops - 1):.4f}ms.')
 
         # Check correctness
-        print('Error, left count: {:d}, right count: {:d}; left img: {:.4f}, right img: {:.4f}.' \
-              .format((left_img_count - left_img_count_gt).abs().max().cpu().numpy(),
-                      (right_img_count - right_img_count_gt).abs().max().cpu().numpy(),
-                      (left_img_stack - left_img_gt).abs().max().cpu().numpy(),
-                      (left_img_stack - left_img_gt).abs().max().cpu().numpy()))
+        print(
+            f"Error, left count: {(left_img_count - left_img_count_gt).abs().max().cpu().numpy():d}" \
+            f", right count: {(right_img_count - right_img_count_gt).abs().max().cpu().numpy():d}" \
+            f"; left img: {(left_img_stack - left_img_gt).abs().max().cpu().numpy():.4f}" \
+            f", right img: {(left_img_stack - left_img_gt).abs().max().cpu().numpy():.4f}."
+        )

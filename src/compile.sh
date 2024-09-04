@@ -1,1 +1,1 @@
-python cuda/setup.py develop --install-dir=/home/users/u5710355/Install/DualPixel
+python cuda/setup.py develop --install-dir="~/Install/DualPixel"

@@ -2,18 +2,22 @@
 # Zhiwei Xu <zhiwei.xu@anu.edu.au>
 #
 
-import torch
+import torch, time, cv2, sys
 import numpy as np
-import time
-import cv2
 import scipy.io as scio
-from dp_autodiff import simdp_extrapol, simdp_extrapol_back
-import sys
+
 sys.path.append('..')
+
+from dp_autodiff import simdp_extrapol, simdp_extrapol_back
 from cuda.lib_dualpixel import DualPixel
 
 
-def simdp(RGB_img, depth, image_left=None, image_right=None):
+def simdp(
+    RGB_img,
+    depth,
+    image_left=None,
+    image_right=None
+):
     cpsize = 5
     # depth_scaled = depth*5.0/(depth.max())
     ker_size = depth
@@ -159,13 +163,13 @@ if __name__ == '__main__':
         img_left, img_right, count_left, count_right = simdp_extrapol(RGB_img, depth)
         duration = time.time() - time_start
 
-        print('Max self forward: img left: {:.8f}, right: {:.8f}; '
-              'count left: {:.8f}, right: {:.8f}; time: {:.6f}s'.format(
-            img_left.cpu().detach().abs().max().numpy(),
-            img_right.cpu().detach().abs().max().numpy(),
-            count_left.cpu().detach().abs().max().numpy(),
-            count_right.cpu().detach().abs().max().numpy(),
-            duration))
+        print(
+            f"Max self forward: img left: {img_left.cpu().detach().abs().max().numpy():.8f}" \
+            f", right: {img_right.cpu().detach().abs().max().numpy():.8f}" \
+            f"; count left: {count_left.cpu().detach().abs().max().numpy():.8f}" \
+            f", right: {count_right.cpu().detach().abs().max().numpy():.8f}" \
+            f"; time: {duration:.6f}s."
+        )
 
     if enable_cuda_implement:
         device = RGB_img.device
@@ -185,12 +189,15 @@ if __name__ == '__main__':
 
             torch.cuda.synchronize()
             time_start = time.time()
-            DualPixel.DepthMerge(RGB_img_permute_cu,
-                                 depth_cu,
-                                 count_left_cu,
-                                 count_right_cu,
-                                 img_left_cu,
-                                 img_right_cu)
+            DualPixel.DepthMerge(
+                RGB_img_permute_cu,
+                depth_cu,
+                count_left_cu,
+                count_right_cu,
+                img_left_cu,
+                img_right_cu
+            )
+
             torch.cuda.synchronize()
             duration_cuda += time.time() - time_start
 
@@ -200,32 +207,41 @@ if __name__ == '__main__':
         img_right_cu = img_right_cu.permute(0, 3, 1, 2).contiguous()
 
         if enable_load_matlab:
-            print('Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
-                  'right img: {:.8f}, count: {:.8f}; max left img: {:.8f}, max right img: {:.8f}; '
-                  'time: {:.6f}s'.format(
-                  (img_left_cu.cpu() - img_left_gt).abs().max().numpy(),
-                  (count_left_cu.cpu() - count_left_gt).abs().max().numpy(),
-                  (img_right_cu.cpu() - img_right_gt).abs().max().numpy(),
-                  (count_right_cu.cpu() - count_right_gt).abs().max().numpy(),
-                  img_left_cu.cpu().abs().max(), img_right_cu.cpu().abs().max(),
-                  duration_cuda))
+            print(
+                'Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
+                'right img: {:.8f}, count: {:.8f}; max left img: {:.8f}, max right img: {:.8f}; '
+                'time: {:.6f}s'.format(
+                    (img_left_cu.cpu() - img_left_gt).abs().max().numpy(),
+                    (count_left_cu.cpu() - count_left_gt).abs().max().numpy(),
+                    (img_right_cu.cpu() - img_right_gt).abs().max().numpy(),
+                    (count_right_cu.cpu() - count_right_gt).abs().max().numpy(),
+                    img_left_cu.cpu().abs().max(), img_right_cu.cpu().abs().max(),
+                    duration_cuda
+                )
+            )
         elif img_left is not None:
-            print('Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
-                  'right img: {:.8f}, count: {:.8f}; time: {:.6f}s'.format(
-                  (img_left_cu.cpu() - img_left.detach()).abs().max().numpy(),
-                  (count_left_cu.cpu() - count_left.detach()).abs().max().numpy(),
-                  (img_right_cu.cpu() - img_right.detach()).abs().max().numpy(),
-                  (count_right_cu.cpu() - count_right.detach()).abs().max().numpy(),
-                  duration_cuda))
+            print(
+                'Check CUDA forward: diff left img: {:.8f}, count: {:.8f}; '
+                'right img: {:.8f}, count: {:.8f}; time: {:.6f}s'.format(
+                    (img_left_cu.cpu() - img_left.detach()).abs().max().numpy(),
+                    (count_left_cu.cpu() - count_left.detach()).abs().max().numpy(),
+                    (img_right_cu.cpu() - img_right.detach()).abs().max().numpy(),
+                    (count_right_cu.cpu() - count_right.detach()).abs().max().numpy(),
+                    duration_cuda
+                )
+            )
 
     if (img_left is not None) and enable_load_matlab:
-        print('Check PyTorch forward: diff left img: {:.8f}, count: {:.8f}; '
-              'right img: {:.8f}, count: {:.8f}; time: {:.6f}s'.format(
-              (img_left.cpu().detach() - img_left_gt).abs().max().numpy(),
-              (count_left.cpu().detach() - count_left_gt).abs().max().numpy(),
-              (img_right.cpu().detach() - img_right_gt).abs().max().numpy(),
-              (count_right.cpu().detach() - count_right_gt).abs().max().numpy(),
-              duration))
+        print(
+            'Check PyTorch forward: diff left img: {:.8f}, count: {:.8f}; '
+            'right img: {:.8f}, count: {:.8f}; time: {:.6f}s'.format(
+                (img_left.cpu().detach() - img_left_gt).abs().max().numpy(),
+                (count_left.cpu().detach() - count_left_gt).abs().max().numpy(),
+                (img_right.cpu().detach() - img_right_gt).abs().max().numpy(),
+                (count_right.cpu().detach() - count_right_gt).abs().max().numpy(),
+                duration
+            )
+        )
 
     # ==== Check backward propagation
     if enable_gradient and (img_left is not None):
@@ -260,10 +276,13 @@ if __name__ == '__main__':
         loss.backward()
         duration = time.time() - time_start
 
-        print('Autodiff backward: min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
-              depth.grad.min().detach().numpy(),
-              depth.grad.max().detach().numpy(),
-              duration))
+        print(
+            'Autodiff backward: min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
+                depth.grad.min().detach().numpy(),
+                depth.grad.max().detach().numpy(),
+                duration
+            )
+        )
 
         if enable_gradient:
             dRGB_img = RGB_img.grad if (RGB_img.grad is not None) else None
@@ -275,21 +294,26 @@ if __name__ == '__main__':
         # Check manual back
         if enable_pytorch_manual_back:
             time_start = time.time()
-            ddepth_manual, dRGB_img_manual = simdp_extrapol_back(RGB_img,
-                                                                 depth,
-                                                                 dimg_left,
-                                                                 dimg_right,
-                                                                 dcount_left,
-                                                                 dcount_right)
+            ddepth_manual, dRGB_img_manual = simdp_extrapol_back(
+                RGB_img,
+                depth,
+                dimg_left,
+                dimg_right,
+                dcount_left,
+                dcount_right
+            )
             duration = time.time() - time_start
 
-            print('Check manual backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
-                  'depth grad min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
-                  (depth.grad - ddepth_manual).abs().max().detach().numpy(),
-                  (dRGB_img - dRGB_img_manual).abs().max().detach().numpy(),
-                  ddepth_manual.min().detach().numpy(),
-                  ddepth_manual.max().detach().numpy(),
-                  duration))
+            print(
+                'Check manual backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
+                'depth grad min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
+                    (depth.grad - ddepth_manual).abs().max().detach().numpy(),
+                    (dRGB_img - dRGB_img_manual).abs().max().detach().numpy(),
+                    ddepth_manual.min().detach().numpy(),
+                    ddepth_manual.max().detach().numpy(),
+                    duration
+                )
+            )
 
         # Check CUDA back
         if enable_cuda_implement:
@@ -308,14 +332,16 @@ if __name__ == '__main__':
                 ddepth_cu = torch.zeros(b, h, w, dtype=torch.float32, device='cuda').contiguous()
                 torch.cuda.synchronize()
                 time_start = time.time()
-                DualPixel.DepthMergeBack(RGB_img_permute_cu,
-                                         depth_cu,
-                                         dcount_left_cu,
-                                         dcount_right_cu,
-                                         dimg_left_cu,
-                                         dimg_right_cu,
-                                         ddepth_cu,
-                                         dimage_cu)
+                DualPixel.DepthMergeBack(
+                    RGB_img_permute_cu,
+                    depth_cu,
+                    dcount_left_cu,
+                    dcount_right_cu,
+                    dimg_left_cu,
+                    dimg_right_cu,
+                    ddepth_cu,
+                    dimage_cu
+                )
                 dimage_cu = dimage_cu.permute(0, 3, 1, 2)
                 torch.cuda.synchronize()
                 duration += time.time() - time_start
@@ -324,10 +350,13 @@ if __name__ == '__main__':
             ddepth_cu = ddepth_cu.contiguous()
             dimage_cu = dimage_cu.contiguous()
 
-            print('Check CUDA backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
-                  'depth grad min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
-                  (depth.grad - ddepth_cu.cpu()).abs().max().numpy(),
-                  (dRGB_img - dimage_cu.cpu()).abs().max().numpy(),
-                  ddepth_cu.cpu().min().numpy(),
-                  ddepth_cu.cpu().max().numpy(),
-                  duration))
+            print(
+                'Check CUDA backward: depth diff: {:.8f}, RGB diff: {:.8f}; '
+                'depth grad min: {:.8f}, max: {:.8f}; time: {:.6f}s'.format(
+                    (depth.grad - ddepth_cu.cpu()).abs().max().numpy(),
+                    (dRGB_img - dimage_cu.cpu()).abs().max().numpy(),
+                    ddepth_cu.cpu().min().numpy(),
+                    ddepth_cu.cpu().max().numpy(),
+                    duration
+                )
+            )

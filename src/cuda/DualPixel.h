@@ -14,7 +14,7 @@
 
 
 #ifdef __cplusplus
-  extern "C" {
+    extern "C" {
 #endif
 
 #define MAX_THREADS_PER_BLOCK 1024
@@ -23,21 +23,25 @@
 typedef unsigned int uint;
 typedef unsigned char uchar;
 
-void DepthMergeCUDA(const at::Tensor image,
-                    const at::Tensor depth,
-                    at::Tensor left_count,
-                    at::Tensor right_count,
-                    at::Tensor left_image_stack,
-                    at::Tensor right_image_stack);
+void DepthMergeCUDA(
+    const at::Tensor image,
+    const at::Tensor depth,
+    at::Tensor left_count,
+    at::Tensor right_count,
+    at::Tensor left_image_stack,
+    at::Tensor right_image_stack
+);
 
-void DepthMergeBackCUDA(const at::Tensor image,
-                        const at::Tensor depth,
-                        const at::Tensor dleft_count,
-                        const at::Tensor dright_count,
-                        const at::Tensor dleft_image_stack,
-                        const at::Tensor dright_image_stack,
-                        at::Tensor ddepth,
-                        at::Tensor dimage);
+void DepthMergeBackCUDA(
+    const at::Tensor image,
+    const at::Tensor depth,
+    const at::Tensor dleft_count,
+    const at::Tensor dright_count,
+    const at::Tensor dleft_image_stack,
+    const at::Tensor dright_image_stack,
+    at::Tensor ddepth,
+    at::Tensor dimage
+);
 
 /*
     Params: image: (batch,height,width,channel)
@@ -52,28 +56,33 @@ void DepthMergeBackCUDA(const at::Tensor image,
     this is to control either or both of left and right images are required.
 
     Note: should require all tensors to be contiguous.
-    Supported max image size: for grey, batch*height*width <= 1024*65535
-                              for RGB + inbuilt average, batch*height*width*channel <= 1024*65535
-                              for RGB + return count, batch*height*width <= 1024*65535
+    Supported max image size:
+        for grey, batch*height*width <= 1024*65535
+        for RGB + inbuilt average, batch*height*width*channel <= 1024*65535
+        for RGB + return count, batch*height*width <= 1024*65535
 */
-void DepthMerge(const at::Tensor image,
-                const at::Tensor depth,
-                at::Tensor left_count,
-                at::Tensor right_count,
-                at::Tensor left_image_stack,
-                at::Tensor right_image_stack);
+void DepthMerge(
+    const at::Tensor image,
+    const at::Tensor depth,
+    at::Tensor left_count,
+    at::Tensor right_count,
+    at::Tensor left_image_stack,
+    at::Tensor right_image_stack
+);
 
-void DepthMergeBack(const at::Tensor image,
-                    const at::Tensor depth,
-                    const at::Tensor dleft_count,
-                    const at::Tensor dright_count,
-                    const at::Tensor dleft_image_stack,
-                    const at::Tensor dright_image_stack,
-                    at::Tensor ddepth,
-                    at::Tensor dimage);
+void DepthMergeBack(
+    const at::Tensor image,
+    const at::Tensor depth,
+    const at::Tensor dleft_count,
+    const at::Tensor dright_count,
+    const at::Tensor dleft_image_stack,
+    const at::Tensor dright_image_stack,
+    at::Tensor ddepth,
+    at::Tensor dimage
+);
 
 #ifdef __cplusplus
-  }
+    }
 #endif
 
 #endif // __DUALPIXEL_H__

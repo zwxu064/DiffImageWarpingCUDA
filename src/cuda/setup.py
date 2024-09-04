@@ -3,6 +3,7 @@
 #
 
 import shutil, glob, os
+
 from setuptools import setup
 from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 
@@ -10,19 +11,21 @@ from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 if os.path.exists('build'):
     shutil.rmtree('build')
 
-setup(name='DualPixel',
-      ext_modules=[CUDAExtension(name='DualPixel',
-                                 sources=['cuda/DualPixel.cpp',
-                                          'cuda/DualPixelCUDA.cu'],
-                                 extra_compile_args={'nvcc': ['-O3',
-                                                              '-arch=sm_35',
-                                                              '--expt-relaxed-constexpr'],
-                                                     'cxx': ['-g',
-                                                             '-std=c++11',
-                                                             '-Wno-deprecated-declarations',
-                                                             '-fopenmp']})],
-      cmdclass={'build_ext': BuildExtension},
-      include_dirs=['.'])
+setup(
+    name='DualPixel',
+    ext_modules=[
+        CUDAExtension(
+            name='DualPixel',
+            sources=['cuda/DualPixel.cpp', 'cuda/DualPixelCUDA.cu'],
+            extra_compile_args={
+                'nvcc': ['-O3', '-arch=sm_35', '--expt-relaxed-constexpr'],
+                'cxx': ['-g', '-std=c++14', '-Wno-deprecated-declarations', '-fopenmp']
+            }
+        )
+    ],
+    cmdclass={'build_ext': BuildExtension},
+    include_dirs=['.']
+)
 
 target_dir = 'cuda/lib_dualpixel'
 if not os.path.exists(target_dir):
