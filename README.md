@@ -1,6 +1,6 @@
 # Differentiable Image Warping (CUDA)
 
-This is the official implementation of Differentiable Image Warping, which is "the reblur module" in "[Weakly-supervised Depth Estimation and Image Deblurring via Dual-Pixel Sensors]()".
+This is the official implementation of Differentiable Image Warping, which is "the reblur module" in "[Weakly-supervised Depth Estimation and Image Deblurring via Dual-Pixel Sensors](https://www.computer.org/csdl/journal/tp/5555/01/10679095/20b3i87Z9q8)".
 
 ## Requirements
 ```
