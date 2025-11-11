@@ -133,11 +133,11 @@ and [Python script](src/ablation/python/simulator_image_warping.py).
 ## Reference
 If this repository is useful for you, please cite the following paper.
 ```bibtex
-@misc{Pan2024DPSensor,
-    title        = {Weakly-supervised Depth Estimation and Image Deblurring via Dual-Pixel Sensors},
-    author       = {Liyuan Pan and Richard Hartley and Liu Liu and Zhiwei Xu and Shah Chowdhury and Yan Yang and Hongguang Zhang and Hongdong Li and Miaomiao Liu},
-    year         = {2024},
-    howpublished = {IEEE Transactions on Pattern Analysis and Machine Intelligence}
+@inproceedings{pan:pami2024dual,
+    title={Weakly-supervised Depth Estimation and Image Deblurring via Dual-pixel Sensors},
+    author={Liyuan Pan, Richard Hartley, Liu Liu, Zhiwei Xu, Shah Chowdhury, Yan Yang, Hongguang Zhang, Hongdong Li, and Miaomiao Liu},
+    booktitle={IEEE Transactions on Pattern Analysis and Machine Intelligence},
+    year={2024}
 }
 ```
 
